@@ -1,8 +1,14 @@
 # Dev Notes
 
-## Current State (Sep 22, 2026)
+## Current State (Sep 23, 2026)
 
-Plugin skeleton exists in a fresh git repo (nothing committed yet).
+Published on GitHub: `git@github:sp4aCemAn/nvimterminals.git`
+Remote `origin` is set up. Committed so far:
+
+- `c0bfb6b` init — full plugin skeleton (lua/, plugin/, NOTES.md, README.md)
+- `8fa88da` MIT License
+
+License: MIT.
 
 ### Files
 

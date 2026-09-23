@@ -16,7 +16,7 @@ With lazy.nvim:
 
 ```lua
 {
-  dir = "~/vsc/nvimterminals", -- or your repo URL once published
+  "sp4aCemAn/nvimterminals",
   config = function()
     require("nvimterminals").setup({
       position = "right", -- "left" | "top" | "bottom"
