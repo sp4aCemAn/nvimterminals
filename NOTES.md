@@ -12,11 +12,19 @@ License: MIT.
 
 ### Files
 
-- `lua/nvimterminals/init.lua` — `setup(opts)`, registers `:TermToggle [name]` command and `<C-\>` toggle_last keymap (normal + terminal mode)
-- `lua/nvimterminals/config.lua` — defaults + merge: `position` ("right"), `size` (0.35), `terminal_cmd` (vim.o.shell), `keymaps.toggle_last`
-- `lua/nvimterminals/terminals.lua` — core: `M.terminals` (name -> {buf, job_id}), `M.current`, `toggle(name)`
+- `lua/nvimterminals/init.lua` — `setup(opts)`, `:TermToggle` (with name completion), `:Terms` picker command, keymaps (`<C-\>` toggle, `<leader>tt` menu)
+- `lua/nvimterminals/config.lua` — defaults + merge: `position`, `size`, `terminal_cmd`, `keymaps.toggle_last`, `keymaps.menu`
+- `lua/nvimterminals/terminals.lua` — core rewritten with `nvim_create_buf` + `nvim_win_set_buf` (fixes E95 and buffer-override); `anchor_win()` so spawning from inside a term window anchors the split to an editor window; `toggle()`, `list()`, `select()`, `M.current`
 - `plugin/nvimterminals.lua` — double-load guard (`vim.g.loaded_nvimterminals`)
+- `tests/lifecycle.lua`, `tests/split_override.lua` — headless regression scripts (see README "Tests")
 - `README.md` — install/usage docs
+
+### Verified working (headless tests, both PASS)
+
+- Modules load, config merge works
+- Spawn -> hide (job keeps running) -> reopen SAME buffer -> second/third named terminal coexist
+- Terminal buffer always in exactly ONE window; editor buffer never overridden
+- Spawn from inside a term window anchors the split to the editor window (anchor_win)
 
 ### Design decisions made
 
@@ -33,29 +41,18 @@ License: MIT.
 - Hide works: `win_findbuf` empty after second toggle, job still alive (`jobwait ... == -1`)
 - Reopen works: third toggle brings the SAME buffer back in a new split
 
-### OPEN BUG — found in last session
+### OPEN BUG — RESOLVED (Sep 23, 2026)
 
-`win_findbuf(buf)` can return MORE than one window id (e.g. `{ 1000, 1001 }`).
-Cause: `create_split()` runs `vsplit` while the terminal buffer may already be
-displayed somewhere, or stale windows linger. Since we only ever check
-`win_findbuf(buf)[1]`, a second hidden/ghost window breaks hide logic (test
-assertion "should be hidden" failed: after 2nd toggle a window still showed it).
-
-Next steps to fix:
-1. In the "hidden -> reopen" branch, before `vim.cmd("buffer "..buf)`, check ALL
-   windows: `for _, w in ipairs(vim.fn.win_findbuf(buf)) do ... end` — the
-   split may be unnecessary if a window already exists in this tabpage.
-2. Or simpler: on reopen, don't create a split first; just find any window
-   showing buf; if none, split THEN switch. Track visibility per-tabpage.
-3. Also verify `nvim_win_close(win, false)` actually closes the right window —
-   log win ids during hide.
-4. Headless quirk to recheck: in headless mode `winnr("$")` was 2 after first
-   toggle, which may itself be the artifact (initial empty buffer window + term
-   window). Test interactively too.
+Previous multi-window/E95 issues were caused by `buf_set_name(0, ...)` renaming
+the CURRENT buffer into a terminal. Fixed by giving every terminal its own
+buffer via `nvim_create_buf(false, false)` + `nvim_win_set_buf` in the split
+window, plus `pcall(vim.api.nvim_buf_set_name, ...)` safely after termopen.
+Headless regression: `tests/lifecycle.lua`, `tests/split_override.lua` — both
+print "PASSED".
 
 ### TODO / Ideas
 
-- [ ] Fix the multi-window hide/reopen bug above
+- [ ] Fix the multi-window hide/reopen bug above  (DONE — see above)
 - [ ] Esc / jk to leave terminal mode inside the term split
 - [ ] Tab awareness: terminal visible in another tab -> focus vs reopen vs hide
 - [ ] Guard: closing last window in a tab (`nvim_win_close` errors on sole window)

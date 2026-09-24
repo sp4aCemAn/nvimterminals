@@ -30,6 +30,11 @@ function M.setup(opts)
         terminals.toggle()
       end, { silent = true, desc = "Toggle last terminal" })
     end
+    if keymaps and keymaps.menu then
+      vim.keymap.set("n", keymaps.menu, function()
+        terminals.select()
+      end, { silent = true, desc = "Terminal list" })
+    end
   end
 end
 

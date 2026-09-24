@@ -6,6 +6,7 @@ M.defaults = {
   terminal_cmd = vim.o.shell,
   keymaps = {
     toggle_last = "<C-\\>",
+    menu = "<leader>tt",
   },
 }
 

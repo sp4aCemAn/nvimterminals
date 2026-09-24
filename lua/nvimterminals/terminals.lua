@@ -12,7 +12,21 @@ local function tab_wins(tabpage)
   end, vim.api.nvim_list_wins())
 end
 
+local function anchor_win()
+  local cur = vim.api.nvim_get_current_win()
+  if vim.bo[vim.api.nvim_win_get_buf(cur)].buftype ~= "terminal" then
+    return
+  end
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if win ~= cur and vim.bo[vim.api.nvim_win_get_buf(win)].buftype ~= "terminal" then
+      vim.api.nvim_set_current_win(win)
+      return
+    end
+  end
+end
+
 local function open_split(bufnr)
+  anchor_win()
   local position = config.get("position")
   local size = config.get("size")
   local cmds = {
