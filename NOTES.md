@@ -14,7 +14,7 @@ License: MIT.
 
 - `lua/nvimterminals/init.lua` — `setup(opts)`, `:TermToggle` (with name completion), `:Terms` picker command, keymaps (`<C-\>` toggle, `<leader>tt` menu)
 - `lua/nvimterminals/config.lua` — defaults + merge: `position`, `size`, `terminal_cmd`, `keymaps.toggle_last`, `keymaps.menu`
-- `lua/nvimterminals/terminals.lua` — core rewritten with `nvim_create_buf` + `nvim_win_set_buf` (fixes E95 and buffer-override); `anchor_win()` so spawning from inside a term window anchors the split to an editor window; `toggle()`, `list()`, `select()`, `M.current`
+- `lua/nvimterminals/terminals.lua` — core rewritten with `nvim_create_buf` + `nvim_win_set_buf` (fixes E95 and buffer-override); `anchor_win()` so spawning from inside a term window anchors the split to an editor window; `show_buffer()` reuses the open term pane for hidden->visible and fresh spawns (single visible pane, VSCode-style); `toggle()`, `list()`, `select()`, `find_open_win()`, `M.current`
 - `plugin/nvimterminals.lua` — double-load guard (`vim.g.loaded_nvimterminals`)
 - `tests/lifecycle.lua`, `tests/split_override.lua` — headless regression scripts (see README "Tests")
 - `README.md` — install/usage docs

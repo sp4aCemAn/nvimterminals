@@ -25,7 +25,31 @@ local function anchor_win()
   end
 end
 
-local function open_split(bufnr)
+-- find a window in the current tab displaying one of our terminals
+function M.find_open_win()
+  local tabpage = vim.api.nvim_get_current_tabpage()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_tabpage(win) == tabpage then
+      local buf = vim.api.nvim_win_get_buf(win)
+      for _, state in pairs(M.terminals) do
+        if state.buf == buf then
+          return win
+        end
+      end
+    end
+  end
+  return nil
+end
+
+-- display a terminal buffer: reuse the open term pane if there is one,
+-- otherwise open a new split anchored to an editor window
+local function show_buffer(bufnr)
+  local existing = M.find_open_win()
+  if existing then
+    vim.api.nvim_win_set_buf(existing, bufnr)
+    vim.api.nvim_set_current_win(existing)
+    return
+  end
   anchor_win()
   local position = config.get("position")
   local size = config.get("size")
@@ -62,13 +86,14 @@ function M.toggle(name)
         return
       end
     end
-    open_split(state.buf)
+    show_buffer(state.buf)
     M.current = name
     return
   end
 
+  -- spawn fresh: reuses the open term pane if one exists, else new split
   local bufnr = vim.api.nvim_create_buf(false, false)
-  open_split(bufnr)
+  show_buffer(bufnr)
   local job_id = vim.fn.termopen(config.get("terminal_cmd"), {
     on_exit = function()
       M.terminals[name] = nil

@@ -3,33 +3,52 @@ local t = require("nvimterminals.terminals")
 local c = require("nvimterminals.config")
 c.setup({ terminal_cmd = "/bin/cat", size = 0.4 })
 
--- spawn "main"
+-- editor window
+vim.cmd("edit /tmp/opencode_file_a.txt")
+local buf_a = vim.api.nvim_get_current_buf()
+local win_a = vim.api.nvim_get_current_win()
+assert(vim.api.nvim_get_current_win() == win_a)
+
+-- spawn main -> NEW split
 t.toggle("main")
 local main = t.terminals.main
-assert(main and vim.api.nvim_buf_is_valid(main.buf), "spawn failed")
-local mainwin = vim.fn.win_findbuf(main.buf)
-assert(#mainwin == 1, "term buffer should be in exactly ONE window, got " .. #mainwin)
+assert(#vim.fn.win_findbuf(main.buf) == 1, "main should be in one window")
+local n_win = #vim.api.nvim_list_wins()
 
--- user opens a second buffer/window (simulate their workflow)
-vim.cmd("new")
-local editor_buf = vim.api.nvim_get_current_buf()
-
--- toggle main again -> should hide, not touch editor buffer
+-- toggle main -> hide, job alive
 t.toggle("main")
 assert(#vim.fn.win_findbuf(main.buf) == 0, "main should be hidden")
-assert(vim.api.nvim_buf_is_valid(editor_buf), "editor buffer must survive hide")
-assert(vim.fn.jobwait({ main.job_id }, 0)[1] == -1, "job must keep running when hidden")
+assert(vim.fn.jobwait({ main.job_id }, 0)[1] == -1, "job must keep running")
+assert(vim.api.nvim_win_get_buf(win_a) == buf_a, "editor overridden on hide")
 
--- toggle main again -> reopens SAME buffer
-t.toggle("main")
-assert(#vim.fn.win_findbuf(main.buf) == 1, "main should reopen in one window")
-
--- second named terminal coexists
+-- spawn build while no term pane open -> NEW split again
 t.toggle("build")
-assert(t.terminals.build and t.terminals.build.buf ~= main.buf, "second terminal must be distinct")
-assert(vim.api.nvim_buf_is_valid(main.buf), "jobs must not interfere")
+local build = t.terminals.build
+assert(#vim.fn.win_findbuf(build.buf) == 1, "build should get a window")
+assert(vim.api.nvim_win_get_buf(win_a) == buf_a, "editor overridden on spawn")
+local n_win_reopened = #vim.api.nvim_list_wins()
+assert(n_win_reopened == n_win, "window count should be stable")
 
--- lists both, picker selection does not error
-assert(vim.inspect(t.list()) == '{ "build", "main" }', "list bad: " .. vim.inspect(t.list()))
+-- toggle main (hidden -> visible) while build pane open -> SWITCHES the pane, no new split
+t.toggle("main")
+assert(#vim.fn.win_findbuf(main.buf) == 1, "main should take over the pane")
+assert(#vim.fn.win_findbuf(build.buf) == 0, "build should be hidden behind main")
+assert(vim.fn.jobwait({ build.job_id }, 0)[1] == -1, "build job must keep running")
+assert(#vim.api.nvim_list_wins() == n_win_reopened, "pane reuse must not create a split")
+assert(vim.api.nvim_win_get_buf(win_a) == buf_a, "editor overridden on switch")
 
-print("ALL LIFECYCLE TESTS PASSED, list=" .. table.concat(t.list(), ","))
+-- fresh spawn while a term pane is open -> also switches in place
+t.toggle("repl")
+local repl = t.terminals.repl
+assert(#vim.fn.win_findbuf(repl.buf) == 1, "repl should be visible")
+assert(#vim.fn.win_findbuf(main.buf) == 0, "main hidden behind repl")
+assert(vim.fn.jobwait({ main.job_id }, 0)[1] == -1, "main job alive")
+assert(#vim.api.nvim_list_wins() == n_win_reopened, "fresh spawn reused pane -> no new split")
+
+-- toggle back to build: switch again
+t.toggle("build")
+assert(#vim.fn.win_findbuf(build.buf) == 1, "build should switch back in")
+assert(#vim.api.nvim_list_wins() == n_win_reopened)
+
+assert(vim.inspect(t.list()) == '{ "build", "main", "repl" }', vim.inspect(t.list()))
+print("ALL PANE-SWITCH TESTS PASSED, list=" .. table.concat(t.list(), ","))

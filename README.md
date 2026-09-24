@@ -8,7 +8,10 @@ buffer list so your buffers and tabs stay organized.
 - `:TermToggle [name]` — open/hide a named terminal (`TermToggle build`, `TermToggle repl`...).
   Each new name spawns a fresh persistent terminal.
 - Hidden terminals keep running; reopen with the same command.
-- Opening a terminal always takes a brand-new split/buffer — your current
+- VS Code-style single pane: if a terminal pane is already open, toggling a
+  (hidden) terminal switches that pane in place — no windows pile up. A new
+  split is only opened when no terminal pane exists.
+- Opening a terminal always takes its own dedicated buffer — your current
   buffer is never replaced or renamed.
 - Splitting anchors to your editor window even when you spawn from inside a
   terminal window, so terminals don't cascade nested.
