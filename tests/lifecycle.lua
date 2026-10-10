@@ -51,4 +51,27 @@ assert(#vim.fn.win_findbuf(build.buf) == 1, "build should switch back in")
 assert(#vim.api.nvim_list_wins() == n_win_reopened)
 
 assert(vim.inspect(t.list()) == '{ "build", "main", "repl" }', vim.inspect(t.list()))
+
+-- multi-tab: one global term pane; find_open_win must reuse across tabpages
+vim.cmd("tabnew /tmp/opencode_file_c.txt")
+local tab2 = vim.api.nvim_get_current_tabpage()
+-- build is visible in tab1's pane; toggling from tab2 HIDES it (cross-tab close)
+local wins_before = #vim.api.nvim_list_wins()
+t.toggle("build")
+assert(#vim.fn.win_findbuf(build.buf) == 0, "build must hide from another tab")
+assert(#vim.api.nvim_list_wins() == wins_before - 1, "exactly one window closed")
+assert(vim.api.nvim_get_current_tabpage() == tab2, "hide stays in the current tab")
+-- reopen build: no pane exists anywhere -> split in tab2
+t.toggle("build")
+assert(#vim.fn.win_findbuf(build.buf) == 1, "build reopens in tab2")
+assert(vim.api.nvim_get_current_tabpage() == tab2)
+-- pane now lives in tab2: from tab1, toggle main -> reuse THAT pane (jump), never a 2nd window
+vim.cmd("tabfirst")
+local wins_tabbed = #vim.api.nvim_list_wins()
+t.toggle("main")
+assert(vim.api.nvim_get_current_tabpage() == tab2, "pane reuse jumps to the pane's tab")
+assert(#vim.fn.win_findbuf(t.terminals.main.buf) == 1, "main in exactly one window")
+assert(#vim.fn.win_findbuf(build.buf) == 0, "build swapped out of the pane")
+assert(#vim.api.nvim_list_wins() == wins_tabbed, "cross-tab reopen must not add a split")
+
 print("ALL PANE-SWITCH TESTS PASSED, list=" .. table.concat(t.list(), ","))
