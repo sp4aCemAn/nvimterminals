@@ -283,6 +283,12 @@ function M.get_current()
   return M.current
 end
 
+-- Live runtime state for a terminal, or nil when unknown. Returns the actual
+-- state table (same object as M.terminals[name]); treat it as read-only.
+function M.get(name)
+  return M.terminals[name]
+end
+
 -- ---------------------------------------------------------------------------
 -- Agent control layer
 -- Effective send policy for terminal `t`:
@@ -466,6 +472,9 @@ function M.lines(name, opts)
     ["end"] = last,
     lines = out,
     dead = state.dead or false,
+    running = job_running(state),
+    pid = state.pid,
+    exit_code = state.exit_code,
   }
 end
 
