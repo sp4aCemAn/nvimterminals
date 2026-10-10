@@ -11,6 +11,8 @@ local M = {}
 M.terminals = {}
 M.current = nil
 
+local augroup = vim.api.nvim_create_augroup("nvimterminals", { clear = true })
+
 local function is_float(win)
   return vim.api.nvim_win_get_config(win).relative ~= ""
 end
@@ -124,7 +126,7 @@ end
 -- NOTE: nvim_buf_delete() on a hidden buffer fires BufUnload+BufWipeout, NOT
 -- BufDelete — listen to both so ":bd" and programmatic deletes behave alike.
 vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-  group = vim.api.nvim_create_augroup("nvimterminals", { clear = true }),
+  group = augroup,
   desc = "nvimterminals: drop terminal state when its buffer is deleted",
   callback = function(ev)
     local bufnr = tonumber(ev.buf)
@@ -144,6 +146,26 @@ vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
       if state.policy == bufnr then
         state.policy = nil
       end
+    end
+  end,
+})
+
+-- Observability: report named terminals still running when nvim exits.
+-- Uses nvim_echo (err=false, no history) rather than vim.notify so headless
+-- test output can't pick up a trailing line and break `tail -1` checks.
+vim.api.nvim_create_autocmd("VimLeavePre", {
+  group = augroup,
+  desc = "nvimterminals: echo still-running terminals at exit",
+  callback = function()
+    local running = {}
+    for name, state in pairs(M.terminals) do
+      if job_running(state) then
+        table.insert(running, name)
+      end
+    end
+    if #running > 0 and #vim.api.nvim_list_uis() > 0 then
+      table.sort(running)
+      vim.api.nvim_echo({ { "nvimterminals: still running at exit: " .. table.concat(running, ", ") } }, false, {})
     end
   end,
 })
