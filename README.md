@@ -53,6 +53,8 @@ allowed = config.agent.enabled  AND  terminal.agent_enabled  AND  policy allows 
 - `*` — allow anything into this terminal.
 - `deny <pattern>` — explicit denies, evaluated BEFORE allows.
 - Empty or comment-only (`# ...`) policy — deny everything (safe default).
+- A malformed Lua pattern fails CLOSED: a broken allow never grants, a broken
+  deny still denies (matched via pcall; sends never raise).
 - Each line of a multi-line `send` payload must pass.
 - The policy buffer IS the storage: patterns are read fresh on every send.
 
@@ -74,9 +76,16 @@ The `reason` strings are a stable contract — nvimcp surfaces them as tool
 errors. Dead terminals (and unknown names) report `no_such_terminal`.
 
 `M.lines(name, { n = 200 })` — `{ ok = true, name, buf, total, start, end,
-lines = { { lnum = <buffer line number>, text = ... }, ... }, dead = bool }`;
-`opts.start` / `opts.count` request an explicit range.
+lines = { { lnum = <buffer line number>, text = ... }, ... }, dead, running,
+pid, exit_code }`; `opts.start` / `opts.count` request an explicit range.
 `{ ok = false, reason = "no_such_terminal" }` otherwise.
+
+`M.get(name)` — live runtime state table (`buf, job_id, pid, dead, exit_code,
+agent_enabled, policy`) or nil; treat as read-only. `M.agent_enabled(name)`
+is the per-terminal switch getter; `M.agent_toggle(name)` flips it.
+
+When nvim exits, any still-running terminals are echoed (`VimLeavePre`) for
+observability; this never affects the term tools' output shape.
 
 ## Commands
 

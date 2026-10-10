@@ -20,7 +20,8 @@ agent-permission layer landed.
   floats, searches ALL tabpages, current tab preferred), agent API: `send()`,
   `lines()`, `agent_toggle()`, `policy_buffer()`
 - `lua/nvimterminals/agent.lua` — pure whitelist semantics: `parse(lines)` /
-  `check(line, pol)`; `*` wildcard, `deny <pat>` before allows, empty=deny-all
+  `check(line, pol)`; `*` wildcard, `deny <pat>` before allows, empty=deny-all;
+  malformed patterns fail closed (pcall'd find, never raises)
 - `plugin/nvimterminals.lua` — double-load guard
 - `tests/lifecycle.lua` (+ multi-tab section), `tests/split_override.lua`,
   `tests/agent_policy.lua` — headless regression scripts (see README "Tests")
@@ -44,6 +45,10 @@ agent-permission layer landed.
   multi-line send (every line must pass), empty/comment-only = deny all
 - send -> `nvim_chan_send(job_id, ...)` lands in the pty (`/bin/cat` echo
   read back through `lines()`); `lstrip` verified
+- review follow-ups: malformed policy patterns fail closed (send never
+  raises), `M.get(name)` exposes live state, `lines()` carries
+  `running/pid/exit_code` (extend-only, no renames — nvimcp compiles against
+  the landed shapes), VimLeavePre echoes still-running terminals
 
 ### Design decisions made
 
@@ -71,6 +76,18 @@ agent-permission layer landed.
   terminal by name at send time; explicit buffer deletion resets to fallback
 - `send` passes bytes verbatim (`\r` = caller's job to include); `lstrip`
   default false; `timeout_ms` accepted-but-ignored (chansend doesn't block)
+- Malformed user patterns in policies FAIL CLOSED (pcall'd find): a broken
+  allow never grants, a broken deny still denies — `send` never raises
+- Cross-repo contract with nvimcp (`~/vsc/nvimcp/lua/nvimcp/tools/term.lua`):
+  its term_read normalizer already consumes BOTH the {lnum,text} and
+  string-array line shapes, reads `res.total`/`res.start`/`res["end"]` and
+  `res.running/pid/exit_code` (falling back to `M.get`/`M.terminals`).
+  Rule: EXTEND these shapes, do not rename what landed — send()'s reason
+  strings + {ok=...}, agent_toggle()/agent_enabled(), lines() field names are
+  what their tools compile against. `M.get(name)` returns the LIVE state
+  table (their fallback path mutates it on older builds).
+- VimLeavePre echoes still-running terminals via nvim_echo (NOT vim.notify —
+  notify could emit trailing lines that break `tail -1` test checks)
 - Multi-tab: reuse the pane in another tab (jump to it) instead of opening a
   second window; per-tab independent panes are NOT supported (deliberate)
 

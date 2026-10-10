@@ -181,7 +181,47 @@ assert(r.ok == false and r.reason == "policy_denied", "empty global allow denies
 assert(vim.wait(4000, function() return t.terminals.dying and t.terminals.dying.dead end), "respawned dying never died")
 
 -- ---------------------------------------------------------------------------
--- 7. picker formatting: [agent] marker, [dead] marker, no race on vanished state
+-- 7. malformed Lua patterns fail CLOSED (send must never raise)
+-- ---------------------------------------------------------------------------
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4, agent = { enabled = true, allow = { "*" } } })
+t.toggle("badpat")
+t.agent_toggle("badpat")
+local _, badbuf = t.policy_buffer("badpat", true)
+-- malformed ALLOW -> treated as a miss -> no allow matches -> policy_denied
+vim.api.nvim_buf_set_lines(badbuf, 0, -1, false, { "[" })
+local ok_call, res_bad = pcall(t.send, "badpat", "ls")
+assert(ok_call, "send raised on malformed allow pattern: " .. tostring(res_bad))
+assert(res_bad.ok == false and res_bad.reason == "policy_denied", vim.inspect(res_bad))
+-- malformed DENY -> treated as a match -> denies even when '*' would allow
+vim.api.nvim_buf_set_lines(badbuf, 0, -1, false, { "*", "deny [" })
+local ok_call2, res_bad2 = pcall(t.send, "badpat", "ls")
+assert(ok_call2, "send raised on malformed deny pattern: " .. tostring(res_bad2))
+assert(res_bad2.ok == false and res_bad2.reason == "policy_denied" and res_bad2.detail == "pattern: [", vim.inspect(res_bad2))
+vim.fn.jobstop(t.terminals.badpat.job_id)
+
+-- ---------------------------------------------------------------------------
+-- 8. M.get + lines() runtime fields (pid / running / exit_code)
+-- ---------------------------------------------------------------------------
+assert(t.get("carry") == t.terminals.carry, "M.get returns the live state table")
+assert(t.get("ghost") == nil, "M.get on unknown -> nil")
+
+-- running terminal: running=true, numeric pid, no exit code yet
+t.toggle("cat8")
+local r_live = t.lines("cat8", { n = 10 })
+assert(r_live.ok and r_live.running == true, vim.inspect(r_live.running))
+assert(type(r_live.pid) == "number", "lines() pid: " .. tostring(r_live.pid))
+assert(r_live.exit_code == nil, "running has no exit_code")
+
+-- exited terminal: running=false, dead=true, exit_code surfaced
+c.setup({ terminal_cmd = "exit 42", size = 0.4, agent = { enabled = true, allow = { "*" } } })
+t.toggle("gone")
+assert(vim.wait(4000, function() return t.terminals.gone and t.terminals.gone.dead end), "gone never died")
+local r_dead = t.lines("gone", { n = 10 })
+assert(r_dead.ok and r_dead.running == false and r_dead.dead == true, vim.inspect(r_dead))
+assert(r_dead.exit_code == 42, "lines() exit_code: " .. tostring(r_dead.exit_code))
+
+-- ---------------------------------------------------------------------------
+-- 9. picker formatting: [agent] marker, [dead] marker, no race on vanished state
 -- ---------------------------------------------------------------------------
 local real_select = vim.ui.select
 local sel_fmt
