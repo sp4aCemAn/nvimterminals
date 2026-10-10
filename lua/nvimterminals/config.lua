@@ -3,10 +3,18 @@ local M = {}
 M.defaults = {
   position = "right",
   size = 0.35,
-  terminal_cmd = vim.o.shell,
+  -- resolved lazily (on use) so setup() at startup sees the real 'shell',
+  -- not whatever vim.o.shell was when this file was first required
+  terminal_cmd = function()
+    return vim.o.shell
+  end,
   keymaps = {
     toggle_last = "<C-\\>",
     menu = "<leader>tt",
+  },
+  agent = {
+    enabled = false,
+    allow = {},
   },
 }
 
@@ -18,7 +26,14 @@ function M.setup(opts)
 end
 
 function M.get(key)
-  return M.options[key]
+  local v = M.options[key]
+  if v == nil then
+    v = M.defaults[key]
+  end
+  if type(v) == "function" then
+    return v()
+  end
+  return v
 end
 
 return M
