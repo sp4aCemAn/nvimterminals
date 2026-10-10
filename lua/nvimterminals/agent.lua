@@ -26,11 +26,20 @@ function M.parse(lines)
   return pol
 end
 
+-- string.find with a malformed user pattern raises; policy evaluation must
+-- never throw. Fail closed: a malformed DENY counts as a match (enforce it),
+-- a malformed ALLOW counts as a miss (an unreadable rule never grants access).
+local function safe_find(line, pattern)
+  local ok, matched = pcall(string.find, line, pattern, 1, false)
+  return ok, ok and matched ~= nil
+end
+
 -- returns allowed (bool), detail (string|nil)
 -- detail is "pattern: <p>" for explicit denies, "<line>" for no-match
 function M.check(line, pol)
   for _, d in ipairs(pol.deny) do
-    if line:find(d, 1, false) then
+    local ok, matched = safe_find(line, d)
+    if not ok or matched then
       return false, "pattern: " .. d
     end
   end
@@ -38,7 +47,8 @@ function M.check(line, pol)
     return true
   end
   for _, a in ipairs(pol.allow) do
-    if line:find(a, 1, false) then
+    local ok, matched = safe_find(line, a)
+    if ok and matched then
       return true
     end
   end
