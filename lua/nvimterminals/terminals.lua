@@ -410,10 +410,22 @@ function M.agent_enabled(name)
   return state and state.agent_enabled or false
 end
 
+-- Observation for send() settling: whole-buffer snapshot. Fresh screens
+-- paint at the TOP (the cursor starts at row 1), so tail-only checks never
+-- fire even though output landed. Line count + concatenated compare.
+local function buffer_signature(buf)
+  local total = vim.api.nvim_buf_line_count(buf)
+  local body = table.concat(vim.api.nvim_buf_get_lines(buf, 0, total, false), "\n")
+  return total, body
+end
+
 -- Send `data` (raw bytes/keystrokes) to a terminal's pty, gated by the
 -- effective agent policy. Always returns a table; never raises.
 --   opts.lstrip      left-strip each outgoing line (indentation)
---   opts.timeout_ms  reserved (chan_send is non-blocking)
+--   opts.wait_ms     after a successful send, wait up to this many ms for
+--                    output to commit to the terminal buffer (yields into
+--                    nvim's event loop while waiting; 0 = don't wait).
+--                    Result gains settled=true|false.
 function M.send(name, data, opts)
   opts = opts or {}
   data = tostring(data or "")
@@ -451,7 +463,20 @@ function M.send(name, data, opts)
   if not ok then
     return { ok = false, reason = "no_such_terminal", detail = "chan_send failed: " .. tostring(err) }
   end
-  return { ok = true }
+  local res = { ok = true }
+  local wait_ms = tonumber(opts.wait_ms) or 0
+  if wait_ms > 0 and state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+    local s0c, s0b = buffer_signature(state.buf)
+    local changed = vim.wait(wait_ms, function()
+      local s1c, s1b = buffer_signature(state.buf)
+      return s1c ~= s0c or s1b ~= s0b
+    end, 50)
+    vim.wait(50) -- small tail so streamed multi-line output commits
+    res.settled = changed == 1 or changed == true
+  else
+    res.settled = nil -- plugin honors wait only when requested
+  end
+  return res
 end
 
 -- Read the terminal's scrollback (read-only, NOT gated by policy).

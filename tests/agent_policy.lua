@@ -246,4 +246,24 @@ end
 assert(has_agent, "[agent] marker missing: " .. vim.inspect(sel_fmt))
 assert(has_dead, "[dead] marker missing: " .. vim.inspect(sel_fmt))
 
+-- ---------------------------------------------------------------------------
+-- 10. send wait_ms: result settles and tail output is visible immediately
+-- ---------------------------------------------------------------------------
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4, agent = { enabled = true, allow = { "echo" } } })
+t.toggle("waitr")
+t.agent_toggle("waitr")
+local r_wait = t.send("waitr", "echo settle-marker\n", { wait_ms = 1500, lstrip = false })
+assert(r_wait.ok == true and r_wait.settled == true, vim.inspect(r_wait))
+local raw = vim.api.nvim_buf_get_lines(t.terminals.waitr.buf, 0, -1, false)
+local found = false
+for _, l in ipairs(raw) do
+  if l:find("settle-marker", 1, true) then
+    found = true
+  end
+end
+assert(found, "settled send left no tail output: " .. vim.inspect(raw))
+local r_nowait = t.send("waitr", "echo plain\n", { wait_ms = 0 })
+assert(r_nowait.ok == true and r_nowait.settled == nil, vim.inspect(r_nowait))
+vim.fn.jobstop(t.terminals.waitr.job_id)
+
 print("AGENT-POLICY TESTS PASSED")

@@ -62,8 +62,10 @@ allowed = config.agent.enabled  AND  terminal.agent_enabled  AND  policy allows 
 
 `M.send(name, data, opts)` — write raw bytes to the terminal's pty
 (chansend; include `\r` yourself to press Enter). `opts.lstrip` (default
-false) left-strips each outgoing line; `opts.timeout_ms` is accepted but
-currently unused (non-blocking). Returns one of:
+false) left-strips each outgoing line; `opts.wait_ms` (default 0) settles
+after sending — waits up to that many ms (yielding into nvim's event loop)
+for the terminal buffer to commit output anywhere, then a 50ms tail; the
+success result gains `settled=true|false`. Returns one of:
 
 ```lua
 { ok = true }

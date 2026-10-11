@@ -75,7 +75,10 @@ agent-permission layer landed.
   `:TermPolicy` on an unknown name pre-creates the buffer; it attaches to the
   terminal by name at send time; explicit buffer deletion resets to fallback
 - `send` passes bytes verbatim (`\r` = caller's job to include); `lstrip`
-  default false; `timeout_ms` accepted-but-ignored (chansend doesn't block)
+  default false; `wait_ms` (default 0) settles after sending: yields into nvim's
+  event loop until the terminal buffer commits output (buffer signature
+  changes, detected anywhere — fresh screens paint at the top), then a 50ms
+  tail; result gains `settled=true|false`
 - Malformed user patterns in policies FAIL CLOSED (pcall'd find): a broken
   allow never grants, a broken deny still denies — `send` never raises
 - Cross-repo contract with nvimcp (`~/vsc/nvimcp/lua/nvimcp/tools/term.lua`):
