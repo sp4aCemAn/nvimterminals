@@ -15,10 +15,11 @@ local c = require("nvimterminals.config")
 --     deterministic and better by swapping a LIVE (else dead) successor into
 --     the pane via nvim_win_set_buf BEFORE deleting the buffer, keeping the
 --     window alive on a terminal;
---   - surgical (manual table-surgery) renames show which subsystems are
---     rename-agnostic (wipeout autocmd, list/select/get/send/lines,
---     VimLeavePre) and which are NOT (the on_exit name closure -> KNOWN-ISSUE
---     below, flipped by R2's job-id resolution).
+--   - rename subsystems: identity + keying + exit closure are exercised via
+--     M.rename (R2+); sections 1-2 pin the forced-delete baseline that close()
+--     must match (plus the R1 FINDING: nvim 0.12.5 deadlocks a later vim.wait
+--     if a term buffer is force-deleted while pty output is in flight -- all
+--     sends here are settled before any delete; M.close will jobstop+settle);
 
 local real_echo = vim.api.nvim_echo
 local real_uis = vim.api.nvim_list_uis
@@ -40,6 +41,15 @@ local function drop(name)
     vim.api.nvim_buf_delete(st.buf, { force = true })
   end
   assert(vim.wait(2000, function() return t.terminals[name] == nil end), name .. " state must drop")
+end
+
+local function exists_bufname(nm)
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_name(b) == nm then
+      return true
+    end
+  end
+  return false
 end
 
 -- ---------------------------------------------------------------------------
@@ -76,36 +86,34 @@ assert(t.terminals.dd == nil, "dead state must drop on buffer delete")
 assert(#exits == e_before, "buffer delete adds no event")
 
 -- ---------------------------------------------------------------------------
--- 3. KNOWN-ISSUE (R2 flips this pin): on_exit_cb captures the terminal NAME
---    at spawn (terminals.lua:102). A rename done ANY other way than key-identity
---    preservation strands the exit update under the old key: after surgical
---    rename + jobstop, today the state never sees dead/exit_code and NO event
---    fires. R2's flip asserts, with M.rename("k1", "k2") then jobstop of the
---    renamed job: state.dead == true, state.exit_code == 129 (SIGTERM via the
---    pty shell, probed), and NvimterminalsExit carries ev.name == "k2".
+-- 3. exit-closure FLIP (R2): on_exit resolves name via job_id, so a
+--    renamed terminal records dead/exit_code under its CURRENT key and
+--    NvimterminalsExit carries the new name. (R1 pinned the old stranded-
+--    update behavior: dead unset, no event.)
 -- ---------------------------------------------------------------------------
 c.setup({ terminal_cmd = "/bin/cat", size = 0.4 })
 t.toggle("k1")
 local k = t.terminals.k1
-t.terminals.k2 = k
-t.terminals.k1 = nil
-assert(pcall(vim.api.nvim_buf_set_name, k.buf, "term://k2"), "surgical bufname set")
+local okk, rname = t.rename("k1", "k2")
+assert(okk == true and rname == "k2", vim.inspect({ okk, rname }))
+assert(t.terminals.k2 == k and t.terminals.k1 == nil, "rename keeps state identity")
+assert(vim.api.nvim_buf_get_name(k.buf) == "term://k2", "bufname follows rename")
 vim.fn.jobstop(k.job_id)
-vim.wait(500, function() return false end)
-assert(k.dead ~= true, "KNOWN-ISSUE still open: dead must stay unset today, got " .. tostring(k.dead))
-assert(k.exit_code == nil, "KNOWN-ISSUE still open: exit_code must stay unset today")
-assert(#exits == 1, "KNOWN-ISSUE still open: no exit event for renamed-away job today (dd's is the only one), got " .. vim.inspect(exits))
+assert(vim.wait(3000, function() return k.dead end), "renamed exit must record dead")
+assert(k.exit_code == 129, "exit code: " .. tostring(k.exit_code))
+assert(#exits == 2, "renamed exit must fire exactly one new event: " .. vim.inspect(exits))
+local kev = exits[2]
+assert(kev.name == "k2" and kev.exit_code == 129 and kev.job_id == k.job_id and kev.buf == k.buf, vim.inspect(kev))
 
 -- ---------------------------------------------------------------------------
--- 4. rename-agnosticism after surgical rename: identity, lookups, gating,
+-- 4. rename invariance via M.rename: identity, lookups, gating,
 --    wipeout-autocmd, picker, VimLeavePre echo
 -- ---------------------------------------------------------------------------
 drop("k2")
 t.toggle("v1")
 local v = t.terminals.v1
 local v_id = v
-t.terminals.v2 = v
-t.terminals.v1 = nil
+assert(t.rename("v1", "v2"))
 assert(t.get("v2") == v_id, "M.get must resolve the same live table under new key")
 assert(t.get("v1") == nil, "old key must be gone")
 local lr = t.lines("v2", { n = 5 })
@@ -153,6 +161,94 @@ assert(leave_text == "nvimterminals: still running at exit: v2", "got: " .. tost
 -- BufWipeout scan is by BUF, so the new key drops cleanly
 vim.api.nvim_buf_delete(v.buf, { force = true })
 assert(vim.wait(2000, function() return t.terminals.v2 == nil end), "wipeout autocmd rename-agnostic")
+
+-- ---------------------------------------------------------------------------
+-- 4b. rename failure modes (D2), policy follow (D3), rollback, command path
+-- ---------------------------------------------------------------------------
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4 })
+t.toggle("f1")
+t.toggle("f2")
+local okr, err
+okr, err = t.rename("ghost", "x")
+assert(okr == false and err == "no_such_terminal", tostring(err))
+okr, err = t.rename("f1", "f2")
+assert(okr == false and err == "terminal_exists", tostring(err))
+okr, err = t.rename("f1", "f1")
+assert(okr == false and err == "same_name", tostring(err))
+okr, err = t.rename("f1", "")
+assert(okr == false and err == "invalid_name", tostring(err))
+okr, err = t.rename("f1", "a\nb")
+assert(okr == false and err == "invalid_name", tostring(err))
+
+-- orphan policy buffer blocks the TARGET name; other names stay free
+local _, porph = t.policy_buffer("z2", true)
+assert(porph and porph > 0, "orphan policy pre-created")
+okr, err = t.rename("f1", "z2")
+assert(okr == false and err == "policy_name_exists", tostring(err))
+-- nvim 0.12.5 renames leave a GHOST buffer re-taking the vacated name
+-- (raw-repro without this plugin). M.rename must evict it so round-trip
+-- renames work and old names free up immediately:
+okr, err = t.rename("f1", "f9")
+assert(okr == true, tostring(err))
+assert(not exists_bufname("term://f1"), "ghost of vacated term://f1 must be evicted")
+assert((t.rename("f9", "f1")))
+assert(not exists_bufname("term://f9"), "ghost of vacated term://f9 must be evicted")
+
+-- buffer-name collision blocks the target
+local bcol = vim.api.nvim_create_buf(false, false)
+vim.api.nvim_buf_set_name(bcol, "term://collide")
+okr, err = t.rename("f1", "collide")
+assert(okr == false and err == "buffer_name_exists", tostring(err))
+vim.api.nvim_buf_delete(bcol, { force = true })
+
+-- policy buffer follows the rename by reference (D3)
+local _, pf = t.policy_buffer("f1", true)
+assert((t.rename("f1", "rr")))
+assert(vim.api.nvim_buf_get_name(pf) == "nvimterminals://policy/rr", vim.api.nvim_buf_get_name(pf))
+assert(t.terminals.rr.policy == pf, "state.policy reference survives")
+assert(not exists_bufname("nvimterminals://policy/f1"), "policy-name ghost must be evicted too")
+
+-- rollback: first nvim_buf_set_name fails -> key+current+bufname all restored
+local real_setname = vim.api.nvim_buf_set_name
+local sn_calls = 0
+vim.api.nvim_buf_set_name = function(buf, nm)
+  sn_calls = sn_calls + 1
+  if sn_calls == 1 then
+    error("stubbed set_name failure")
+  end
+  return real_setname(buf, nm)
+end
+local cur_before = t.current
+okr, err = t.rename("f2", "f2b")
+vim.api.nvim_buf_set_name = real_setname
+assert(okr == false and err:find("buffer_name_exists", 1, true), tostring(err))
+assert(t.terminals.f2 ~= nil and t.terminals.f2b == nil, "rollback restores key")
+assert(t.current == cur_before, "rollback restores current: " .. tostring(t.current))
+assert(vim.api.nvim_buf_get_name(t.terminals.f2.buf) == "term://f2", "rollback restores bufname")
+-- and the same rename succeeds once the failure is gone:
+assert((t.rename("f2", "f2b")))
+
+-- command path: setup() registers TermRename; nvim_cmd goes through it
+package.path = "./lua/?/init.lua;" .. package.path -- real installs get this pattern via runtimepath
+require("nvimterminals").setup({ terminal_cmd = "/bin/cat", size = 0.4 })
+assert(vim.api.nvim_get_commands({}).TermRename ~= nil, "TermRename registered")
+local notified = {}
+local real_notify = vim.notify
+vim.notify = function(msg, level, o)
+  table.insert(notified, { msg, level })
+end
+vim.api.nvim_cmd({ cmd = "TermRename", args = { "f2b", "cmd1" } }, {})
+vim.notify = real_notify
+assert(t.terminals.cmd1 ~= nil and t.terminals.f2b == nil, "command renamed")
+assert(notified[1] and notified[1][1]:find("'f2b' -> 'cmd1'", 1, true), vim.inspect(notified))
+-- completion: names offered for arg1, nothing for arg2 (getcompletion on the
+-- command line; built-in noise like flags is tolerated, names must appear)
+local comp1 = table.concat(vim.fn.getcompletion("TermRename ", "cmdline"), ",")
+assert(comp1:find("cmd1", 1, true), "arg1 completion missing names: " .. comp1)
+
+drop("rr")
+drop("cmd1")
+vim.api.nvim_buf_delete(porph, { force = true })
 
 -- ---------------------------------------------------------------------------
 -- 5. term:// bufname: set at spawn, never re-taken by nvim (rename relies on

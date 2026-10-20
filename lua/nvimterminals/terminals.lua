@@ -99,10 +99,23 @@ local function job_running(state)
   return ok and type(res) == "table" and res[1] == -1
 end
 
-local function on_exit_cb(name)
+-- Resolve name/state by JOB ID. Used by on_exit so a renamed terminal
+-- records its exit under its CURRENT name (the old captured-name closure
+-- stranded updates under the stale key -- R1 KNOWN-ISSUE, flipped here).
+-- Equivalent to the old guard for every non-renamed flow: job ids are unique
+-- per process, so a late event from a replaced job simply finds no match.
+local function state_by_job(job)
+  for name, state in pairs(M.terminals) do
+    if state.job_id == job then
+      return name, state
+    end
+  end
+end
+
+local function on_exit_cb()
   return function(job, code, event)
-    local state = M.terminals[name]
-    if not state or state.job_id ~= job then
+    local name, state = state_by_job(job)
+    if not state then
       return
     end
     state.dead = true
@@ -239,7 +252,7 @@ function M.toggle(name)
   end
 
   local cmd = config.get("terminal_cmd")
-  local on_exit = on_exit_cb(name)
+  local on_exit = on_exit_cb()
   local job_id
   if vim.fn.has("nvim-0.11") == 1 then
     job_id = vim.fn.jobstart(cmd, { term = true, on_exit = on_exit })
@@ -309,6 +322,100 @@ end
 -- state table (same object as M.terminals[name]); treat it as read-only.
 function M.get(name)
   return M.terminals[name]
+end
+
+local function bufnr_by_name(name)
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_name(b) == name then
+      return b
+    end
+  end
+  return -1
+end
+
+-- nvim 0.12.5 quirk (repro without this plugin): renaming a buffer that
+-- carries a custom term://-style name leaves a GHOST buffer that re-takes the
+-- vacated name (empty, unlisted, unmodified). Evict it so the old name is
+-- immediately reusable (round-trip renames). Guarded: never touches a
+-- terminal buffer or a referenced policy buffer.
+local function drop_ghost(bname)
+  local g = bufnr_by_name(bname)
+  if g ~= -1 and vim.bo[g].buftype == "" then
+    for _, st in pairs(M.terminals) do
+      if st.buf == g or st.policy == g then
+        return
+      end
+    end
+    pcall(vim.api.nvim_buf_delete, g, { force = true })
+  end
+end
+
+-- Rename a terminal in place (R2). Atomic: every pre-check runs before any
+-- mutation; a mid-rename buffer-name failure rolls the whole operation back.
+-- The state table keeps its IDENTITY (only the key moves), so nvimcp callers
+-- holding an M.get result keep working. M.current follows; term://<bufname>
+-- and the policy buffer (by reference or by orphan scan of the OLD name)
+-- follow too. Returns (true, new) or (false, reason).
+function M.rename(name, new)
+  name = name or M.current or "main"
+  local state = M.terminals[name]
+  if not state then
+    return false, "no_such_terminal"
+  end
+  new = tostring(new or "")
+  if new == "" or new:find("[\n\r]") then
+    return false, "invalid_name"
+  end
+  if new == name then
+    return false, "same_name"
+  end
+  if M.terminals[new] then
+    return false, "terminal_exists"
+  end
+  if bufnr_by_name("term://" .. new) ~= -1 then
+    return false, "buffer_name_exists"
+  end
+  if bufnr_by_name("nvimterminals://policy/" .. new) ~= -1 then
+    return false, "policy_name_exists"
+  end
+
+  local polbuf = state.policy
+  if not (polbuf and vim.api.nvim_buf_is_valid(polbuf)) then
+    local found = bufnr_by_name("nvimterminals://policy/" .. name)
+    polbuf = found ~= -1 and found or nil
+  end
+
+  M.terminals[name] = nil
+  M.terminals[new] = state
+  if M.current == name then
+    M.current = new
+  end
+
+  local ok, err = pcall(vim.api.nvim_buf_set_name, state.buf, "term://" .. new)
+  if not ok then
+    M.terminals[new] = nil
+    M.terminals[name] = state
+    if M.current == new then
+      M.current = name
+    end
+    return false, "buffer_name_exists: " .. tostring(err)
+  end
+  drop_ghost("term://" .. name)
+  if polbuf then
+    local ok_pol, err_pol = pcall(vim.api.nvim_buf_set_name, polbuf, "nvimterminals://policy/" .. new)
+    if not ok_pol then
+      pcall(vim.api.nvim_buf_set_name, state.buf, "term://" .. name)
+      drop_ghost("term://" .. new)
+      M.terminals[new] = nil
+      M.terminals[name] = state
+      if M.current == new then
+        M.current = name
+      end
+      return false, "buffer_name_exists: " .. tostring(err_pol)
+    end
+    drop_ghost("nvimterminals://policy/" .. name)
+  end
+  return true, new
 end
 
 -- ---------------------------------------------------------------------------

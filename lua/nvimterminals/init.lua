@@ -8,6 +8,18 @@ local function complete_names(arglead)
   end, terminals.list())
 end
 
+-- complete terminal names for ARG1 only (arg2 of two-arg commands is free)
+local function complete_first_arg(arglead, cmdline, cursorpos)
+  local before = cmdline:sub(1, cursorpos - 1):gsub("^%s*:?%a+%s*", "")
+  if before ~= "" then
+    local ncomplete = select(2, before:gsub("%S+%s+", ""))
+    if ncomplete + (before:match("%s$") and 0 or 1) >= 2 then
+      return {}
+    end
+  end
+  return complete_names(arglead)
+end
+
 function M.setup(opts)
   local config = require("nvimterminals.config")
   config.setup(opts)
@@ -36,6 +48,23 @@ function M.setup(opts)
     nargs = "?",
     desc = "Toggle agent control for a terminal",
     complete = complete_names,
+  })
+
+  vim.api.nvim_create_user_command("TermRename", function(e)
+    if #e.fargs ~= 2 then
+      vim.notify("nvimterminals: usage :TermRename <old> <new>", vim.log.levels.ERROR)
+      return
+    end
+    local ok, result = terminals.rename(e.fargs[1], e.fargs[2])
+    if ok then
+      vim.notify("nvimterminals: renamed '" .. e.fargs[1] .. "' -> '" .. result .. "'")
+    else
+      vim.notify("nvimterminals: cannot rename '" .. tostring(e.fargs[1]) .. "': " .. tostring(result), vim.log.levels.ERROR)
+    end
+  end, {
+    nargs = "+",
+    desc = "Rename a terminal (old new)",
+    complete = complete_first_arg,
   })
 
   vim.api.nvim_create_user_command("TermPolicy", function(e)
