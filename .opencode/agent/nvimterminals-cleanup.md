@@ -59,6 +59,7 @@ timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/life
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/split_override.lua +qa   # SPLIT-OVERRIDE GUARD TESTS PASSED, list=main,repl
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/agent_policy.lua +qa     # AGENT-POLICY TESTS PASSED
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/leavenotify.lua +qa       # LEAVE-NOTIFY TESTS PASSED, running=alpha,zeta
+timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/rename_close.lua +qa      # RENAME-CLOSE TESTS PASSED
 ```
 
 The sentinel must be the LAST stdout line of each run (leavenotify.lua itself
