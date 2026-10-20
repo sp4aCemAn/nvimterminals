@@ -145,6 +145,7 @@ cd .../nvimterminals
 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/lifecycle.lua +qa
 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/split_override.lua +qa
 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/agent_policy.lua +qa
+nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/leavenotify.lua +qa
 ```
 
 Each script prints `... PASSED` on success or a failing assertion.

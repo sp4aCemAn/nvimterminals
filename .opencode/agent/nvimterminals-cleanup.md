@@ -58,10 +58,13 @@ we never edit `~/vsc/nvimcp/`.
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/lifecycle.lua +qa       # ALL PANE-SWITCH TESTS PASSED, list=build,main,repl
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/split_override.lua +qa   # SPLIT-OVERRIDE GUARD TESTS PASSED, list=main,repl
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/agent_policy.lua +qa     # AGENT-POLICY TESTS PASSED
+timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/leavenotify.lua +qa       # LEAVE-NOTIFY TESTS PASSED, running=alpha,zeta
 ```
 
-From C2 onward add: `-l tests/leavenotify.lua` to the same form. Baseline as of
-this writing: all three PASS at HEAD. Counts/asserts may grow, never regress.
+The sentinel must be the LAST stdout line of each run (leavenotify.lua itself
+pins the no-trailing-output-at-exit property that keeps `tail -1` checks safe).
+Baseline as of this writing: all four PASS at HEAD. Counts/asserts may grow,
+never regress.
 
 ## Headless testing rules (learned the hard way — see NOTES.md)
 
@@ -98,7 +101,7 @@ lua/nvimterminals/agent.lua       pure whitelist semantics: parse/check (deny-be
 lua/nvimterminals/config.lua      defaults + merge (agent = {enabled=false, allow={}})
 lua/nvimterminals/init.lua        setup(), commands, keymaps
 plugin/nvimterminals.lua          double-load guard
-tests/                            lifecycle.lua, split_override.lua, agent_policy.lua (README "Tests")
+tests/                            lifecycle.lua, split_override.lua, agent_policy.lua, leavenotify.lua (README "Tests")
 ~/vsc/nvimcp/                     CONSUMER (read-only): lua/nvimcp/tools/term.lua pins our shapes
 ```
 
