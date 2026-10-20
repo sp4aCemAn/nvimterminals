@@ -96,7 +96,8 @@ never regress.
 ## Repo map
 
 ```
-lua/nvimterminals/terminals.lua   528 lines: panes/windows + state/lifecycle + picker + AGENT LAYER (314-528)
+lua/nvimterminals/terminals.lua   ~330 lines: panes/windows + state/lifecycle + picker + frozen agent FACADE
+lua/nvimterminals/agent_api.lua   agent layer impl (bind(terminals_module, job_running); owns no state)
 lua/nvimterminals/agent.lua       pure whitelist semantics: parse/check (deny-before-allow, *, fail closed)
 lua/nvimterminals/config.lua      defaults + merge (agent = {enabled=false, allow={}})
 lua/nvimterminals/init.lua        setup(), commands, keymaps

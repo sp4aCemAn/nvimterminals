@@ -18,8 +18,12 @@ against `send/lines/get` and the reason strings below — EXTEND-only there).
   `vim.o.shell` capture), `keymaps.*`, `agent = { enabled=false, allow={} }`
 - `lua/nvimterminals/terminals.lua` — core: `toggle()`, `list()`, `select()`
   (`[open]/[hidden]/[dead]` + `[agent]` markers), `find_open_win()` (skips
-  floats, searches ALL tabpages, current tab preferred), agent API: `send()`,
-  `lines()`, `agent_toggle()`, `policy_buffer()`
+  floats, searches ALL tabpages, current tab preferred); re-exports the frozen
+  agent facade (`send/lines/policy_buffer/agent_toggle/agent_enabled`) from
+  agent_api via `bind(M, job_running)` — nvimcp's entry path, unchanged
+- `lua/nvimterminals/agent_api.lua` — agent control layer implementation
+  (extracted from terminals.lua in C3, behavior-preserving; reads live
+  `terminals` module state through the bind, owns no state)
 - `lua/nvimterminals/agent.lua` — pure whitelist semantics: `parse(lines)` /
   `check(line, pol)`; `*` wildcard, `deny <pat>` before allows, empty=deny-all;
   malformed patterns fail closed (pcall'd find, never raises)
