@@ -83,8 +83,28 @@ pid, exit_code }`; `opts.start` / `opts.count` request an explicit range.
 `{ ok = false, reason = "no_such_terminal" }` otherwise.
 
 `M.get(name)` — live runtime state table (`buf, job_id, pid, dead, exit_code,
-agent_enabled, policy`) or nil; treat as read-only. `M.agent_enabled(name)`
+agent_enabled, policy`) or nil; treat it as read-only. `M.agent_enabled(name)`
 is the per-terminal switch getter; `M.agent_toggle(name)` flips it.
+
+`M.rename(name, new)` — rename in place: the state table keeps its IDENTITY
+(only the key moves), the `term://` buffer name and the policy buffer follow,
+`M.current` follows, and later exit events carry the NEW name. Atomic: all
+pre-checks (`no_such_terminal`, `invalid_name`, `same_name`, `terminal_exists`,
+`buffer_name_exists`, `policy_name_exists`) run before any mutation; a failure
+mid-rename rolls everything back. Returns `(true, new)` or `(false, reason)`.
+These reasons belong to the command surface — they are NOT part of the
+nvimcp-facing `send/lines` reason contract.
+
+`M.close(name)` — stop the job and forget the terminal (buffer death stays the
+only state-drop path). If it held the pane, a successor terminal is swapped
+into the SAME window (alphabetically-first live one, else first dead one);
+focus and tabpage are never moved. The last visible terminal's pane window
+closes when the tab has other windows (same rule as toggle-hide). The job is
+stopped and settled before the buffer delete, so closing right after a send
+cannot hang nvim. Never fires `NvimterminalsExit` (matches a forced `:bd`).
+The policy buffer SURVIVES: respawning the same name re-attaches it; deleting
+the policy buffer resets to the global fallback. Returns `(true, name)` or
+`(false, "no_such_terminal")`.
 
 When nvim exits, any still-running terminals are echoed (`VimLeavePre`) for
 observability; this never affects the term tools' output shape.
@@ -95,14 +115,19 @@ observability; this never affects the term tools' output shape.
 | --- | --- |
 | `:TermToggle [name]` | toggle/create a named terminal |
 | `:Terms` | picker of all terminals |
+| `:TermRename <old> <new>` | rename a terminal (keeps job, buffer, agent settings, policy) |
+| `:TermClose [name]` | stop a terminal's job and drop its state (pane shows the successor) |
 | `:TermAgent [name]` | toggle agent control for a terminal |
 | `:TermPolicy [name]` | edit a terminal's agent command whitelist |
 
 ## Events
 
 - `User NvimterminalsExit` — fires when a terminal's process exits.
-  `ev.data = { name, buf, job_id, pid, exit_code, event }`. The terminal
-  state (and scrollback) stays until the terminal buffer is deleted.
+  `ev.data = { name, buf, job_id, pid, exit_code, event }`. The name is the
+  terminal's CURRENT name, even after `:TermRename`. The terminal state (and
+  scrollback) stays until the terminal buffer is deleted. Forgetting a
+  terminal via `:TermClose` or `:bd` never fires the event (the job is killed
+  as part of the drop, not as a natural exit).
 
 ## Install
 
@@ -132,6 +157,8 @@ With lazy.nvim:
 
 - `:TermToggle` — toggle `main` terminal
 - `:TermToggle build` — toggle a terminal named `build` (name completion available)
+- `:TermRename build compile` — rename `build` -> `compile` (keeps job, buffer, agent settings, whitelist)
+- `:TermClose build` — stop `build`'s job and forget it (its pane shows the next terminal; whitelist survives for a future respawn under the same name)
 - `:Terms` — list terminals and pick one
 - `:TermAgent build` — allow/deny agent sends into `build`
 - `:TermPolicy build` — edit `build`'s command whitelist

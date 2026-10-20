@@ -42,6 +42,10 @@ we never edit `~/vsc/nvimcp/`.
   EXTEND-ONLY: no renames, no shape swaps. `lines()` zero-line reads must
   keep the current empty-table encoding (empty tables marshal as msgpack
   ARRAYS — nvimcp's normalizer consumes the landed shape; do not "fix" it).
+- `M.rename`/`M.close` reasons (`no_such_terminal | invalid_name | same_name |
+  terminal_exists | buffer_name_exists | policy_name_exists`) are the COMMAND
+  surface — NOT nvimcp-facing (its tools do not call them); do not casually
+  unify them with the send/lines contract above.
 - `require("nvimterminals.terminals")` and its exported surface are the entry
   path. Internal reorganization must keep it working identically (facade
   delegation is fine; moving the require path is not).
@@ -79,6 +83,11 @@ never regress.
   process ZERO events — always wait on the actual flag before asserting it.
 - `string.find(text, needle, 1, true)` is PLAIN match — do not escape `%`.
 - `nvim_get_commands({})` keys user commands by their Cased name.
+- nvim 0.12.5 deadlocks a `vim.wait` when a terminal buffer with IN-FLIGHT pty
+  output is force-deleted (raw repro, no plugin): settle/jobstop BEFORE any
+  delete in tests and in plugin teardown paths (`M.close` does this).
+- `nvim_buf_set_name` off a custom `term://` name leaves a GHOST buffer
+  re-taking the vacated name — evict it (rename does).
 - Test harness style: plain Lua scripts, `n_fail` counters, print the PASS
   sentinel, exit nonzero on failure. Match existing tests exactly; no
   frameworks.
@@ -97,7 +106,7 @@ never regress.
 ## Repo map
 
 ```
-lua/nvimterminals/terminals.lua   ~330 lines: panes/windows + state/lifecycle + picker + frozen agent FACADE
+lua/nvimterminals/terminals.lua   ~510 lines: panes/windows + state/lifecycle + picker + rename/close + frozen agent FACADE
 lua/nvimterminals/agent_api.lua   agent layer impl (bind(terminals_module, job_running); owns no state)
 lua/nvimterminals/agent.lua       pure whitelist semantics: parse/check (deny-before-allow, *, fail closed)
 lua/nvimterminals/config.lua      defaults + merge (agent = {enabled=false, allow={}})
@@ -108,9 +117,11 @@ tests/                            lifecycle.lua, split_override.lua, agent_polic
 ```
 
 Key state facts: `M.terminals` name->{buf, job_id, pid, dead, exit_code,
-agent_enabled, policy}; state drops ONLY via the buffer-death autocmd; the
-policy buffer `nvimterminals://policy/<name>` IS the storage, read fresh each
-send, no caching.
+agent_enabled, policy} (+ transient `closing` inside `M.close`); keys move via
+`M.rename` but the state TABLE's IDENTITY never changes (nvimcp may hold
+`M.get` results); `on_exit` resolves the name by JOB ID; state drops ONLY via
+the buffer-death autocmd; the policy buffer `nvimterminals://policy/<name>` IS
+the storage, read fresh each send, no caching.
 
 ## Phase queue — execute in order, report after each
 

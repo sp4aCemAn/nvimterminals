@@ -7,6 +7,8 @@ Remote `origin` is set up. IS the execution backend for nvimcp (an MCP server
 exposing nvim to AI agents): stable programmatic API + agent-permission layer
 landed and consumed live (`~/vsc/nvimcp/lua/nvimcp/tools/term.lua` compiles
 against `send/lines/get` and the reason strings below — EXTEND-only there).
+Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
+`M.close` (command surface only — not part of the nvimcp contract).
 
 ### Files
 
@@ -18,9 +20,11 @@ against `send/lines/get` and the reason strings below — EXTEND-only there).
   `vim.o.shell` capture), `keymaps.*`, `agent = { enabled=false, allow={} }`
 - `lua/nvimterminals/terminals.lua` — core: `toggle()`, `list()`, `select()`
   (`[open]/[hidden]/[dead]` + `[agent]` markers), `find_open_win()` (skips
-  floats, searches ALL tabpages, current tab preferred); re-exports the frozen
-  agent facade (`send/lines/policy_buffer/agent_toggle/agent_enabled`) from
-  agent_api via `bind(M, job_running)` — nvimcp's entry path, unchanged
+  floats, searches ALL tabpages, current tab preferred), `rename()`
+  (identity-preserving, atomic, ghost-evicting), `close()` (successor swap ->
+  jobstop+settle -> buffer delete); re-exports the frozen agent facade
+  (`send/lines/policy_buffer/agent_toggle/agent_enabled`) from agent_api via
+  `bind(M, job_running)` — nvimcp's entry path, unchanged
 - `lua/nvimterminals/agent_api.lua` — agent control layer implementation
   (extracted from terminals.lua in C3, behavior-preserving; reads live
   `terminals` module state through the bind, owns no state)
@@ -54,6 +58,11 @@ against `send/lines/get` and the reason strings below — EXTEND-only there).
   raises), `M.get(name)` exposes live state, `lines()` carries
   `running/pid/exit_code` (extend-only, no renames — nvimcp compiles against
   the landed shapes), VimLeavePre echoes still-running terminals
+- rename/close (R series): identity-preserving rename + job-id exit naming +
+  rename-ghost eviction + rollback (stubbed `set_name`) pinned in
+  `tests/rename_close.lua`; close successor-swap (live-preferred),
+  focus/tabpage untouched, no-exit-event parity with `:bd`, post-send close
+  deadlock probe, and policy-survival/re-attach pins all green
 
 ### Design decisions made
 
@@ -98,6 +107,24 @@ against `send/lines/get` and the reason strings below — EXTEND-only there).
   notify could emit trailing lines that break `tail -1` test checks)
 - Multi-tab: reuse the pane in another tab (jump to it) instead of opening a
   second window; per-tab independent panes are NOT supported (deliberate)
+- Rename (R2): `M.rename` keeps the state-table IDENTITY (only the key moves,
+  so nvimcp callers holding `M.get` results keep working); `term://` bufname,
+  policy buffer name and `M.current` follow; `on_exit` resolves the name by
+  JOB ID so post-rename exits report the CURRENT name (the old captured-name
+  closure stranded updates). Atomic: pre-check reasons
+  `no_such_terminal | invalid_name | same_name | terminal_exists |
+  buffer_name_exists | policy_name_exists` before any mutation, full rollback
+  on a mid-rename `set_name` failure. These reasons are the COMMAND surface —
+  NOT part of the nvimcp `send/lines` reason contract.
+- Close (R3): `M.close` = swap a successor into the pane (alphabetically-first
+  LIVE, dead fallback; focus and tabpage never moved — the pane window
+  survives ON A TERMINAL instead of dying with the buffer as raw `:bd` does),
+  then jobstop + bounded settle, then the forced buffer delete (still the
+  ONLY state-drop path). Transient `state.closing` flag keeps the exit
+  callback silent — close matches the forced-delete baseline (no event).
+  Last-visible terminal follows the toggle-hide window rule. Policy buffer
+  SURVIVES close; respawn re-attaches it by name; deleting it resets to the
+  global fallback.
 
 ### Testing gotchas (learned the hard way)
 
@@ -119,6 +146,21 @@ against `send/lines/get` and the reason strings below — EXTEND-only there).
 - `string.find(text, needle, 1, true)` with `true` = PLAIN match — don't
   escape `%` in that case (test bug we actually hit)
 - `user commands` are keyed by their Cased name in `nvim_get_commands({})`
+- nvim 0.12.5: force-deleting a terminal buffer while pty output is IN FLIGHT
+  deadlocks the NEXT `vim.wait` (plain-repro, no plugin: `jobstart(term=true)`
+  + `chansend` + `buf_delete(force)` + `wait` hangs). Settle output — or
+  jobstop and wait until not-running — BEFORE deleting. Tests that send must
+  settle before any teardown.
+- renaming a buffer that carries a custom `term://`-style name leaves a GHOST
+  buffer re-taking the vacated name (empty, unlisted, harmless but it blocks
+  the name; raw nvim behavior). Evict it after renames or old names become
+  permanently un-usable.
+- `nvim_create_user_command` opts.nargs accepts only `"*"|"+"|"`?" on 0.12 —
+  the `"0"/"1"/"2"` numeric-string forms are rejected; enforce exact arg
+  counts via `#e.fargs` (and user commands cannot contain digits in names)
+- `vim.ui_attach` needs a real RPC channel — unavailable in `-l` scripts;
+  stub `vim.api.*` functions instead and restore BY REFERENCE (`= nil`
+  corrupts the lazy api dispatcher)
 
 Run tests like:
 
