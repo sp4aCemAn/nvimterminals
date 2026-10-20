@@ -1,11 +1,12 @@
 # Dev Notes
 
-## Current State (Oct 10, 2026)
+## Current State (Oct 20, 2026)
 
 Published on GitHub: `git@github:sp4aCemAn/nvimterminals.git`
-Remote `origin` is set up. About to become the execution backend for nvimcp
-(an MCP server exposing nvim to AI agents): stable programmatic API +
-agent-permission layer landed.
+Remote `origin` is set up. IS the execution backend for nvimcp (an MCP server
+exposing nvim to AI agents): stable programmatic API + agent-permission layer
+landed and consumed live (`~/vsc/nvimcp/lua/nvimcp/tools/term.lua` compiles
+against `send/lines/get` and the reason strings below — EXTEND-only there).
 
 ### Files
 

@@ -1,0 +1,11 @@
+# nvim swap / session / backup artifacts
+*.swp
+*.swo
+*~
+Session.vim
+
+# local tooling
+.luarc.json
+
+# generated help tags
+doc/tags
