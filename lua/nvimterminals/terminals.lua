@@ -115,7 +115,9 @@ end
 local function on_exit_cb()
   return function(job, code, event)
     local name, state = state_by_job(job)
-    if not state then
+    if not state or state.closing then
+      -- closing: M.close() already committed to teardown; staying silent
+      -- matches the forced-delete baseline (:bd fires no NvimterminalsExit)
       return
     end
     state.dead = true
@@ -416,6 +418,76 @@ function M.rename(name, new)
     drop_ghost("nvimterminals://policy/" .. name)
   end
   return true, new
+end
+
+-- Pane successor for close(): alphabetically-first LIVE terminal, falling
+-- back to the first dead one (dead buffers survive for scrollback). M.list()
+-- is sorted and valid-buffer-only.
+local function successor_name(exclude)
+  local dead_fallback
+  for _, n in ipairs(M.list()) do
+    if n ~= exclude then
+      if job_running(M.terminals[n]) then
+        return n
+      end
+      dead_fallback = dead_fallback or n
+    end
+  end
+  return dead_fallback
+end
+
+-- Close a terminal (R3). When it holds the pane: a successor is swapped in
+-- (window survives ON A TERMINAL -- deliberate delta vs raw nvim, which kills
+-- the pane window, pinned in R1 section 1); the LAST visible terminal's pane
+-- window closes when the tab has >1 window (toggle-hide rule), else nvim's
+-- own buffer replacement handles the sole window. Focus and tabpage are never
+-- moved by the swap path. Then jobstop + bounded settle BEFORE the forced
+-- buffer delete: nvim 0.12.5 deadlocks a later vim.wait when a terminal
+-- buffer with in-flight pty output is force-deleted (R1 finding), and raw
+-- :bd does not protect against this -- another deliberate delta. The buffer
+-- delete stays the ONLY state-drop path (BufDelete/BufWipeout autocmd). The
+-- policy buffer SURVIVES so a re-spawn re-attaches it by name (existing
+-- documented semantics). Returns (true, name) or (false, reason).
+function M.close(name)
+  name = name or M.current or "main"
+  local state = M.terminals[name]
+  if not state or not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
+    return false, "no_such_terminal"
+  end
+
+  local pane
+  for _, win in ipairs(vim.fn.win_findbuf(state.buf)) do
+    if not is_float(win) then
+      pane = win
+      break
+    end
+  end
+  if pane then
+    local succ = successor_name(name)
+    if succ then
+      vim.api.nvim_win_set_buf(pane, M.terminals[succ].buf)
+    else
+      local tab = vim.api.nvim_win_get_tabpage(pane)
+      if #tab_wins(tab) > 1 then
+        pcall(vim.api.nvim_win_close, pane, false)
+      end
+    end
+  end
+
+  if state.job_id and not state.dead then
+    state.closing = true
+    pcall(vim.fn.jobstop, state.job_id)
+    -- bounded settle: let the job die + pty flush BEFORE the forced delete
+    -- (nvim 0.12.5 wait-deadlock, R1 finding). The closing flag keeps the
+    -- exit callback silent so close() matches the forced-delete baseline.
+    vim.wait(500, function()
+      local okw, resw = pcall(vim.fn.jobwait, { state.job_id }, 0)
+      return (not okw) or type(resw) ~= "table" or resw[1] ~= -1
+    end, 25)
+  end
+
+  pcall(vim.api.nvim_buf_delete, state.buf, { force = true })
+  return true, name
 end
 
 -- ---------------------------------------------------------------------------

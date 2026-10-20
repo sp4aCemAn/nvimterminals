@@ -67,6 +67,20 @@ function M.setup(opts)
     complete = complete_first_arg,
   })
 
+  vim.api.nvim_create_user_command("TermClose", function(e)
+    local name = vim.trim(e.args)
+    local ok, result = terminals.close(name ~= "" and name or nil)
+    if not ok then
+      vim.notify("nvimterminals: cannot close " .. (name ~= "" and ("'" .. name .. "'") or "(default terminal)") .. ": " .. tostring(result), vim.log.levels.ERROR)
+    else
+      vim.notify("nvimterminals: closed '" .. result .. "'")
+    end
+  end, {
+    nargs = "?",
+    desc = "Close a terminal (kills the job, drops state; scrollback policy survives)",
+    complete = complete_names,
+  })
+
   vim.api.nvim_create_user_command("TermPolicy", function(e)
     local name = vim.trim(e.args)
     name = name ~= "" and name or terminals.get_current()

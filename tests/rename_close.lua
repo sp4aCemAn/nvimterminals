@@ -260,4 +260,103 @@ vim.wait(300, function() return false end)
 assert(vim.api.nvim_buf_get_name(t.terminals.nm.buf) == "term://nm", "name not re-taken")
 drop("nm")
 
+-- ---------------------------------------------------------------------------
+-- 6. close(): unknown, successor swap (live preferred, dead fallback), pane
+--    window survives the swap / dies with the LAST terminal, focus untouched,
+--    still no exit events (forced-delete baseline preserved)
+-- ---------------------------------------------------------------------------
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4 })
+local okc, erc = t.close("ghost")
+assert(okc == false and erc == "no_such_terminal", tostring(erc))
+
+local ed_win = vim.api.nvim_get_current_win()
+assert(vim.bo[vim.api.nvim_win_get_buf(ed_win)].buftype == "", "test must sit at an editor window")
+
+t.toggle("a")
+t.toggle("b")
+c.setup({ terminal_cmd = "exit 3", size = 0.4 })
+t.toggle("cc")
+assert(vim.wait(3000, function() return t.terminals.cc and t.terminals.cc.dead end), "cc never died")
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4 })
+t.toggle("b") -- b back into the pane; a live-hidden, cc dead-hidden
+
+local pane_win = t.find_open_win()
+assert(pane_win and vim.fn.win_findbuf(t.terminals.b.buf)[1] == pane_win, "b visible")
+vim.api.nvim_set_current_win(ed_win)
+local wins_before = #vim.api.nvim_list_wins()
+local e_before = #exits
+okc, erc = t.close("b")
+assert(okc == true and erc == "b", tostring(erc))
+assert(t.terminals.b == nil, "state dropped")
+assert(#exits == e_before, "close fires no exit event (forced-delete baseline kept): " .. vim.inspect(exits))
+assert(vim.api.nvim_win_is_valid(pane_win), "successor swap keeps the pane window")
+assert(vim.fn.win_findbuf(t.terminals.a.buf)[1] == pane_win, "LIVE successor a swapped in (dead cc skipped)")
+assert(#vim.api.nvim_list_wins() == wins_before, "no window closed on swap path")
+assert(vim.api.nvim_get_current_win() == ed_win, "focus untouched")
+
+okc = t.close("a")
+assert(okc == true)
+assert(vim.fn.win_findbuf(t.terminals.cc.buf)[1] == pane_win, "dead successor cc swapped in (no live left)")
+
+okc = t.close("cc")
+assert(okc == true and t.terminals.cc == nil)
+assert(not vim.api.nvim_win_is_valid(pane_win), "last-term pane window dies")
+assert(#vim.api.nvim_list_wins() == wins_before - 1)
+
+-- ---------------------------------------------------------------------------
+-- 7. close IMMEDIATELY after a send: internal jobstop+settle must prevent the
+--    nvim 0.12.5 in-flight-output delete deadlock (R1 FINDING). The probe is
+--    simply that vim.wait RETURNS afterwards.
+-- ---------------------------------------------------------------------------
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4, agent = { enabled = true, allow = { "*" } } })
+t.toggle("s")
+t.agent_toggle("s")
+local rs = t.send("s", "echo close-me\r")
+assert(rs.ok, vim.inspect(rs))
+vim.api.nvim_set_current_win(ed_win)
+okc = t.close("s")
+assert(okc == true, "close after send")
+assert(t.terminals.s == nil)
+vim.wait(200, function() return false end)
+print("post-close-deadlock probe survived")
+
+-- ---------------------------------------------------------------------------
+-- 8. policy buffer survives close; respawn re-attaches by name; explicit
+--    policy delete resets to the global fallback
+-- ---------------------------------------------------------------------------
+local _, pb = t.policy_buffer("pp", true)
+vim.api.nvim_buf_set_lines(pb, 0, -1, false, { "^ls" })
+t.toggle("pp")
+t.agent_toggle("pp")
+assert(t.send("pp", "ls").ok, "pre-attached policy found by name")
+assert(t.send("pp", "rm x").ok == false, "policy denies rm")
+okc = t.close("pp")
+assert(okc == true)
+assert(vim.api.nvim_buf_is_valid(pb), "policy buffer survives close")
+t.toggle("pp")
+t.agent_toggle("pp")
+assert(t.send("pp", "ls").ok, "respawn re-attaches surviving policy")
+assert(t.send("pp", "rm x").ok == false)
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4, agent = { enabled = true, allow = { "*" } } })
+vim.api.nvim_buf_delete(pb, { force = true })
+assert(t.send("pp", "rm x").ok, "global fallback after policy reset")
+okc = t.close("pp")
+assert(okc == true)
+
+-- ---------------------------------------------------------------------------
+-- 9. :TermClose command path (setup() ran in 4b; commands are registered)
+-- ---------------------------------------------------------------------------
+t.toggle("cm")
+local notified2 = {}
+local real_notify2 = vim.notify
+vim.notify = function(msg, level, o)
+  table.insert(notified2, msg)
+end
+vim.api.nvim_cmd({ cmd = "TermClose", args = { "cm" } }, {})
+assert(t.terminals.cm == nil, "command closed")
+assert(notified2[1] and notified2[1]:find("closed 'cm'", 1, true), vim.inspect(notified2))
+vim.api.nvim_cmd({ cmd = "TermClose", args = { "ghost" } }, {})
+assert(notified2[2] and notified2[2]:find("no_such_terminal", 1, true), vim.inspect(notified2))
+vim.notify = real_notify2
+
 print("RENAME-CLOSE TESTS PASSED")
