@@ -175,6 +175,9 @@ vim.api.nvim_create_autocmd("BufWriteCmd", {
   pattern = "nvimterminals://policy/*",
   callback = function(ev)
     vim.bo[ev.buf].modified = false
+    -- W4: :w on a policy float is the save-and-done gesture; splits (where
+    -- :w is just "I'm done editing here" while keeping it visible) are kept.
+    require("nvimterminals.agent_api").close_floats(ev.buf)
   end,
   desc = "nvimterminals: policy :w is a no-op save (the buffer IS the live policy)",
 })

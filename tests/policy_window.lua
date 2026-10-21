@@ -170,4 +170,63 @@ assert(vim.b[yb].current_syntax == "nvimterminals_policy", "syntax not loaded: "
 assert(vim.bo[yb].buftype == "acwrite" and vim.bo[yb].modified == false, "W2 intact")
 t.close("syn")
 
+-- ---------------------------------------------------------------------------
+-- 9. W4 gestures: q / <Esc> close the policy float (buffer survives), :w is
+--    save-and-done on a float but KEEPS a split; gating stays live throughout
+-- ---------------------------------------------------------------------------
+t.toggle("w4")
+t.agent_toggle("w4")
+vim.api.nvim_set_current_win(ed_win)
+vim.api.nvim_cmd({ cmd = "TermPolicy", args = { "w4" } }, {})
+local wb = t.terminals.w4.policy
+fl, sp = wins_for(wb)
+assert(#fl == 1 and #sp == 0, "float for W4")
+
+-- q closes the float. :normal respects mappings and runs synchronously --
+-- headless typeahead is NOT processed inside -l scripts (probe: nvim_input
+-- and feedkeys + 2s of vim.wait left the map registered and the float open).
+vim.cmd("normal q")
+fl, sp = wins_for(wb)
+assert(#fl == 0 and #sp == 0, "q closed the float")
+assert(vim.api.nvim_buf_is_valid(wb), "storage survives the dismiss")
+
+vim.api.nvim_set_current_win(ed_win)
+vim.api.nvim_cmd({ cmd = "TermPolicy", args = { "w4" } }, {})
+fl, sp = wins_for(wb)
+assert(#fl == 1, "float reopened")
+vim.cmd("normal " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+fl = wins_for(wb)
+assert(#fl == 0, "<Esc> closed the float")
+assert(vim.api.nvim_buf_is_valid(wb))
+
+-- :w on the float: save-and-done
+vim.api.nvim_set_current_win(ed_win)
+vim.api.nvim_cmd({ cmd = "TermPolicy", args = { "w4" } }, {})
+vim.api.nvim_buf_set_lines(wb, 0, -1, false, { "^echo" })
+vim.cmd("write")
+fl, sp = wins_for(wb)
+assert(#fl == 0 and #sp == 0, ":w closed the float")
+assert(vim.bo[wb].modified == false, ":w cleared modified")
+local r3 = t.send("w4", "echo hi")
+assert(r3.ok, vim.inspect(r3))
+r3 = t.send("w4", "rm x")
+assert(r3.ok == false and r3.reason == "policy_denied", vim.inspect(r3))
+
+-- :w in split mode KEEPS the split visible
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4, agent = { enabled = true, allow = { "*" } }, policy_window = "split" })
+vim.api.nvim_set_current_win(ed_win)
+vim.api.nvim_cmd({ cmd = "TermPolicy", args = { "w4" } }, {})
+fl, sp = wins_for(wb)
+assert(#sp == 1 and #fl == 0, "split shown")
+local spw = sp[1]
+vim.api.nvim_set_current_win(spw)
+vim.api.nvim_buf_set_lines(wb, 0, -1, false, { "^ls" })
+vim.cmd("write")
+fl, sp = wins_for(wb)
+assert(#sp == 1 and sp[1] == spw, ":w keeps the split open")
+assert(vim.bo[wb].modified == false)
+vim.api.nvim_win_close(spw, true)
+c.setup({ terminal_cmd = "/bin/cat", size = 0.4, agent = { enabled = true, allow = { "*" } }, policy_window = "float" })
+t.close("w4")
+
 print("POLICY-WINDOW TESTS PASSED")

@@ -84,6 +84,8 @@ never regress.
   process ZERO events — always wait on the actual flag before asserting it.
 - `string.find(text, needle, 1, true)` is PLAIN match — do not escape `%`.
 - `nvim_get_commands({})` keys user commands by their Cased name.
+- Typeahead (`nvim_input`/`feedkeys`) is NOT processed inside `-l` scripts —
+  drive normal-mode maps with `:normal` (respects mappings, synchronous).
 - nvim 0.12.5 deadlocks a `vim.wait` when a terminal buffer with IN-FLIGHT pty
   output is force-deleted (raw repro, no plugin): settle/jobstop BEFORE any
   delete in tests and in plugin teardown paths (`M.close` does this).
@@ -122,8 +124,9 @@ agent_enabled, policy} (+ transient `closing` inside `M.close`); keys move via
 `M.rename` but the state TABLE's IDENTITY never changes (nvimcp may hold
 `M.get` results); `on_exit` resolves the name by JOB ID; state drops ONLY via
 the buffer-death autocmd; the policy buffer `nvimterminals://policy/<name>` IS
-the storage (buftype=acwrite; `:w` = no-op save that only clears `modified`;
-filetype `nvimterminals_policy` with the shipped syntax), read fresh each
+the storage (buftype=acwrite; `:w` = no-op save that only clears `modified`
+and closes policy FLOATS; `q`/`<Esc>` close the float; filetype
+`nvimterminals_policy` with the shipped syntax), read fresh each
 send, no caching.
 
 ## Phase queue — execute in order, report after each

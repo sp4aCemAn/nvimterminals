@@ -119,6 +119,23 @@ function M.agent_enabled(name)
   return state and state.agent_enabled or false
 end
 
+-- Close every FLOAT window showing `buf` (W4: q / <Esc> / :w gestures). The
+-- buffer itself survives untouched -- it IS the policy storage. Splits are
+-- left alone. Returns the number of floats closed.
+function M.close_floats(buf)
+  local n = 0
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+    return n
+  end
+  for _, w in ipairs(vim.fn.win_findbuf(buf)) do
+    if vim.api.nvim_win_is_valid(w) and vim.api.nvim_win_get_config(w).relative ~= "" then
+      pcall(vim.api.nvim_win_close, w, false)
+      n = n + 1
+    end
+  end
+  return n
+end
+
 -- Observation for send() settling: whole-buffer snapshot. Fresh screens
 -- paint at the TOP (the cursor starts at row 1), so tail-only checks never
 -- fire even though output landed. Line count + concatenated compare.

@@ -26,6 +26,13 @@ local function open_policy_window(bufnr, name)
       title = " nvimterminals policy: " .. name .. " ",
       title_pos = "center",
     })
+    -- W4: dismiss gestures. Buffer-local (registered on the float path), so
+    -- in a later split they are harmless no-ops (nothing to close).
+    local close_it = function()
+      require("nvimterminals.agent_api").close_floats(bufnr)
+    end
+    vim.keymap.set("n", "q", close_it, { buffer = bufnr, nowait = true, silent = true, desc = "Close the policy float" })
+    vim.keymap.set("n", "<Esc>", close_it, { buffer = bufnr, nowait = true, silent = true, desc = "Close the policy float" })
     return
   end
   vim.cmd("botright 20vsplit")

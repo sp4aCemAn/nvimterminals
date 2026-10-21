@@ -138,13 +138,16 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   Last-visible terminal follows the toggle-hide window rule. Policy buffer
   SURVIVES close; respawn re-attaches it by name; deleting it resets to the
   global fallback.
-- Policy window (W1/W2 cleanup): `:TermPolicy` shows the policy buffer in a
+- Policy window (W1-W4 cleanup): `:TermPolicy` shows the policy buffer in a
   centered editor-relative float (`policy_window="float"` default; `"split"`
   restores the legacy `botright 20vsplit`). An already-visible policy buffer
   is just FOCUSSED regardless of mode — never converted or duplicated. Pure
   presentation: the buffer stays the storage, gating semantics unchanged
-  (pinned in `tests/policy_window.lua`). W2 pinned too: acwrite, unmodified
-  at seed, `:w` clears the flag and writes nothing to disk.
+  (pinned in `tests/policy_window.lua`). W2: acwrite, unmodified at seed, `:w`
+  clears the flag and writes nothing to disk. W4: buffer-local `q`/`<Esc>`
+  close the policy FLOAT (`agent_api.close_floats`; splits never closed);
+  `:w` also closes floats (save-and-done) but keeps splits — the buffer
+  survives every gesture either way.
   `nvim_win_get_config` returns `title` as a CHUNK LIST `{{text, hl}}`, not a string.
 
 ### Testing gotchas (learned the hard way)
@@ -186,6 +189,13 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   from the buffer NAME and set a foreign b:current_syntax over an explicitly
   assigned one — headless syntax tests should source the syntax file directly
   (via an rtp entry), skipping `:syntax on` entirely
+- typeahead is NOT processed inside `-l` scripts: `nvim_input` / `feedkeys`
+  plus `vim.wait` leave keymaps unfired (probed 2s) — drive normal-mode maps
+  in tests with `vim.cmd("normal q")` (`:normal` respects mappings and runs
+  synchronously)
+- `vim.fn.maparg(name, mode, false, false)` = 4 args is fine; the 5-arg form
+  (buffer as 5th) raises E118 from Lua like `bufnr` — check the CURRENT
+  buffer's map or use the dict form
 
 Run tests like:
 
