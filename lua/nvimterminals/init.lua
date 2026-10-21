@@ -2,6 +2,36 @@ local terminals = require("nvimterminals.terminals")
 
 local M = {}
 
+-- Present the policy buffer per config.policy_window ("float" default).
+-- An EXISTING window showing the buffer (float OR split) always wins: we
+-- focus it, never duplicate. The buffer is the storage; window choice has
+-- zero effect on gating semantics.
+local function open_policy_window(bufnr, name)
+  local win = vim.fn.win_findbuf(bufnr)[1]
+  if win then
+    vim.api.nvim_set_current_win(win)
+    return
+  end
+  if require("nvimterminals.config").get("policy_window") ~= "split" then
+    local width = math.min(80, math.max(20, math.floor(vim.o.columns * 0.7)))
+    local height = math.min(20, math.max(6, math.floor(vim.o.lines * 0.6)))
+    vim.api.nvim_open_win(bufnr, true, {
+      relative = "editor",
+      row = math.max(0, math.floor((vim.o.lines - height) / 2)),
+      col = math.max(0, math.floor((vim.o.columns - width) / 2)),
+      width = width,
+      height = height,
+      style = "minimal",
+      border = "rounded",
+      title = " nvimterminals policy: " .. name .. " ",
+      title_pos = "center",
+    })
+    return
+  end
+  vim.cmd("botright 20vsplit")
+  vim.api.nvim_win_set_buf(0, bufnr)
+end
+
 local function complete_names(arglead)
   return vim.tbl_filter(function(name)
     return name:find(arglead, 1, true) ~= nil
@@ -89,12 +119,8 @@ function M.setup(opts)
       return
     end
     local _, bufnr = terminals.policy_buffer(name, true)
-    local win = bufnr and vim.fn.win_findbuf(bufnr)[1]
-    if win then
-      vim.api.nvim_set_current_win(win)
-    elseif bufnr then
-      vim.cmd("botright 20vsplit")
-      vim.api.nvim_win_set_buf(0, bufnr)
+    if bufnr then
+      open_policy_window(bufnr, name)
     end
   end, {
     nargs = "?",

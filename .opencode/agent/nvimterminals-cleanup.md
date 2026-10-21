@@ -64,6 +64,7 @@ timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/spli
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/agent_policy.lua +qa     # AGENT-POLICY TESTS PASSED
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/leavenotify.lua +qa       # LEAVE-NOTIFY TESTS PASSED, running=alpha,zeta
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/rename_close.lua +qa      # RENAME-CLOSE TESTS PASSED
+timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/policy_window.lua +qa     # POLICY-WINDOW TESTS PASSED
 ```
 
 The sentinel must be the LAST stdout line of each run (leavenotify.lua itself
@@ -109,7 +110,7 @@ never regress.
 lua/nvimterminals/terminals.lua   ~510 lines: panes/windows + state/lifecycle + picker + rename/close + frozen agent FACADE
 lua/nvimterminals/agent_api.lua   agent layer impl (bind(terminals_module, job_running); owns no state)
 lua/nvimterminals/agent.lua       pure whitelist semantics: parse/check (deny-before-allow, *, fail closed)
-lua/nvimterminals/config.lua      defaults + merge (agent = {enabled=false, allow={}})
+lua/nvimterminals/config.lua      defaults + merge (policy_window="float"; agent = {enabled=false, allow={}})
 lua/nvimterminals/init.lua        setup(), commands, keymaps
 plugin/nvimterminals.lua          double-load guard
 tests/                            lifecycle.lua, split_override.lua, agent_policy.lua, leavenotify.lua (README "Tests")

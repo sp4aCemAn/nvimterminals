@@ -12,6 +12,10 @@ M.defaults = {
     toggle_last = "<C-\\>",
     menu = "<leader>tt",
   },
+  -- how :TermPolicy presents the policy scratch buffer: "float" (centered
+  -- window; the buffer is storage, closing the window changes nothing) or
+  -- "split" (legacy: botright 20vsplit).
+  policy_window = "float",
   agent = {
     enabled = false,
     allow = {},

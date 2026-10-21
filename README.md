@@ -42,7 +42,9 @@ allowed = config.agent.enabled  AND  terminal.agent_enabled  AND  policy allows 
   shows an `[agent]` marker).
 - `:TermPolicy [name]` — open/edit a per-terminal whitelist in a dedicated
   scratch buffer `nvimterminals://policy/<name>` (unlisted; one Lua pattern
-  per line). While that buffer exists it REPLACES the global fallback.
+  per line). Shown in a centered float by default (`policy_window = "split"`
+  for the legacy split; a buffer already on screen is just focused either
+  way). While that buffer exists it REPLACES the global fallback.
 - `M.lines(name, { n = 200 })` — read the terminal's screen lines; read-only
   and deliberately NOT gated by any whitelist.
 
@@ -118,7 +120,7 @@ observability; this never affects the term tools' output shape.
 | `:TermRename <old> <new>` | rename a terminal (keeps job, buffer, agent settings, policy) |
 | `:TermClose [name]` | stop a terminal's job and drop its state (pane shows the successor) |
 | `:TermAgent [name]` | toggle agent control for a terminal |
-| `:TermPolicy [name]` | edit a terminal's agent command whitelist |
+| `:TermPolicy [name]` | edit a terminal's agent command whitelist (floating window by default) |
 
 ## Events
 
@@ -140,6 +142,7 @@ With lazy.nvim:
     require("nvimterminals").setup({
       position = "right", -- "left" | "top" | "bottom"
       size = 0.35,
+      policy_window = "float", -- or "split" for the legacy :TermPolicy window
       -- keymaps = {
       --   toggle_last = "<C-\\>",  -- nvim-terminals: last terminal
       --   menu = "<leader>tt",     -- set to false to disable
@@ -174,6 +177,7 @@ nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/split_override.
 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/agent_policy.lua +qa
 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/leavenotify.lua +qa
 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/rename_close.lua +qa
+nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/policy_window.lua +qa
 ```
 
 Each script prints `... PASSED` on success or a failing assertion.

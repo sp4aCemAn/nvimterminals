@@ -17,7 +17,8 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   (edit whitelist buffer), keymaps (`<C-\>` toggle, `<leader>tt` menu)
 - `lua/nvimterminals/config.lua` — defaults + merge: `position`, `size`,
   `terminal_cmd` (lazy function -> resolved in `M.get`, no require-time
-  `vim.o.shell` capture), `keymaps.*`, `agent = { enabled=false, allow={} }`
+  `vim.o.shell` capture), `keymaps.*`, `policy_window` ("float"|"split"),
+  `agent = { enabled=false, allow={} }`
 - `lua/nvimterminals/terminals.lua` — core: `toggle()`, `list()`, `select()`
   (`[open]/[hidden]/[dead]` + `[agent]` markers), `find_open_win()` (skips
   floats, searches ALL tabpages, current tab preferred), `rename()`
@@ -125,6 +126,13 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   Last-visible terminal follows the toggle-hide window rule. Policy buffer
   SURVIVES close; respawn re-attaches it by name; deleting it resets to the
   global fallback.
+- Policy window (W1 cleanup): `:TermPolicy` shows the policy buffer in a
+  centered editor-relative float (`policy_window="float"` default; `"split"`
+  restores the legacy `botright 20vsplit`). An already-visible policy buffer
+  is just FOCUSSED regardless of mode — never converted or duplicated. Pure
+  presentation: the buffer stays the storage, gating semantics unchanged
+  (pinned in `tests/policy_window.lua`). `nvim_win_get_config` returns
+  `title` as a CHUNK LIST `{{text, hl}}`, not a string.
 
 ### Testing gotchas (learned the hard way)
 
