@@ -42,9 +42,11 @@ allowed = config.agent.enabled  AND  terminal.agent_enabled  AND  policy allows 
   shows an `[agent]` marker).
 - `:TermPolicy [name]` — open/edit a per-terminal whitelist in a dedicated
   scratch buffer `nvimterminals://policy/<name>` (unlisted; one Lua pattern
-  per line). Edits take effect on the next send — there is nothing to save;
-  `:w` is a no-op that just clears the changed flag (the buffer is `acwrite`,
-  no file is ever written). Shown in a centered float by default
+  per line, highlighted with the shipped `nvimterminals_policy` filetype —
+  NOT `lua`, since pattern lines are not Lua code and would light up as
+  syntax errors). Edits take effect on the next send — there is nothing to
+  save; `:w` is a no-op that just clears the changed flag (the buffer is
+  `acwrite`, no file is ever written). Shown in a centered float by default
   (`policy_window = "split"` for the legacy split; a buffer already on screen
   is just focused either way). While that buffer exists it REPLACES the
   global fallback.

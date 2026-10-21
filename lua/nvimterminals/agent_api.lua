@@ -85,7 +85,8 @@ function M.policy_buffer(name, create)
     -- acwrite routes :w to the BufWriteCmd no-op handler (terminals.lua):
     -- the buffer content IS the live policy, there is nothing to save to disk.
     vim.bo[buf].buftype = "acwrite"
-    vim.bo[buf].filetype = "lua"
+    vim.bo[buf].filetype = "nvimterminals_policy"
+    vim.bo[buf].commentstring = "# %s"
     pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, {
       "# nvimterminals policy for terminal: " .. name,
       "# one Lua pattern per line; matched against the trimmed command.",

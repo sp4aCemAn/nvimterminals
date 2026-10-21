@@ -85,7 +85,8 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   so); do not add new reason strings without coordinating with nvimcp
 - Reads are never gated: `lines()` works on dead terminals too (scrollback)
 - Policy buffer `nvimterminals://policy/<name>` IS the storage (buflisted=false,
-  buftype=acwrite, filetype=lua); read fresh each send — deliberately NO
+  buftype=acwrite, filetype=`nvimterminals_policy`); read fresh each send —
+  deliberately NO
   caching/invalidation. `:w` is a no-op save: the BufWriteCmd handler only
   clears `modified` (acwrite keeps writes off disk; the old plain-buftype
   buffers tried to CREATE a file named `nvimterminals://policy/<name>` and
@@ -93,6 +94,13 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   While it exists it REPLACES the global fallback (empty buffer => deny all).
   `:TermPolicy` on an unknown name pre-creates the buffer; it attaches to the
   terminal by name at send time; explicit buffer deletion resets to fallback
+- W3 BREAKING change: policy buffers are no longer `filetype=lua` — pattern
+  lines like `^ls` rendered as Lua SYNTAX ERRORS (red). Shipped
+  `syntax/nvimterminals_policy.vim` (comment/deny/wildcard highlight groups,
+  plain allows as Normal); autocmds keyed to the old filetype must retarget
+  to `nvimterminals_policy`. Syntax file RE-CLAIMS the buffer (only finishes
+  early when its OWN syntax is already active) because `:syntax on`'s BufRead
+  machinery re-guesses a filetype from the buffer NAME (gotcha below).
 - `send` passes bytes verbatim (`\r` = caller's job to include); `lstrip`
   default false; `wait_ms` (default 0) settles after sending: yields into nvim's
   event loop until the terminal buffer commits output (buffer signature
@@ -174,6 +182,10 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
 - `vim.ui_attach` needs a real RPC channel — unavailable in `-l` scripts;
   stub `vim.api.*` functions instead and restore BY REFERENCE (`= nil`
   corrupts the lazy api dispatcher)
+- `:syntax on` (and filetype auto-detect machinery) can RE-GUESS a filetype
+  from the buffer NAME and set a foreign b:current_syntax over an explicitly
+  assigned one — headless syntax tests should source the syntax file directly
+  (via an rtp entry), skipping `:syntax on` entirely
 
 Run tests like:
 

@@ -148,4 +148,26 @@ r2 = t.send("sv", "rm x")
 assert(r2.ok == false and r2.reason == "policy_denied", vim.inspect(r2))
 t.close("sv")
 
+-- ---------------------------------------------------------------------------
+-- 8. W3 syntax: policy buffers are NOT lua (patterns would highlight as
+--    syntax errors); a dedicated filetype + shipped syntax file handles them
+-- ---------------------------------------------------------------------------
+t.toggle("syn")
+t.agent_toggle("syn")
+vim.api.nvim_cmd({ cmd = "TermPolicy", args = { "syn" } }, {})
+local yb = t.terminals.syn.policy
+assert(vim.bo[yb].filetype == "nvimterminals_policy", "filetype: " .. vim.bo[yb].filetype)
+assert(vim.bo[yb].commentstring == "# %s", "commentstring: " .. vim.bo[yb].commentstring)
+-- the syntax file ships in the plugin root (a runtimepath entry for real
+-- installs); headless -u NONE has none, so append it and load manually --
+-- proving the file is valid vimscript, re-claims the buffer, and sets
+-- b:current_syntax. (:syntax on is NOT run first here: its BufRead machinery
+-- re-guesses a filetype from the buffer NAME and would fight the pin.)
+vim.opt.rtp:append("./")
+vim.cmd("runtime! syntax/nvimterminals_policy.vim")
+assert(vim.b[yb].current_syntax == "nvimterminals_policy", "syntax not loaded: " .. tostring(vim.b[yb].current_syntax))
+-- W2 pins survive the filetype change: still acwrite + unmodified seed
+assert(vim.bo[yb].buftype == "acwrite" and vim.bo[yb].modified == false, "W2 intact")
+t.close("syn")
+
 print("POLICY-WINDOW TESTS PASSED")
