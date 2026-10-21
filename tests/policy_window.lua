@@ -117,4 +117,35 @@ vim.notify = real_notify
 assert(#notified == 1 and notified[1]:find("no terminal", 1, true), vim.inspect(notified))
 assert(#vim.api.nvim_list_wins() == wins0, "no window opened on error")
 
+-- ---------------------------------------------------------------------------
+-- 7. W2 save semantics: acwrite + no-op :w (nothing touches disk), fresh
+--    seeds unmodified, gating keeps working right after :w
+-- ---------------------------------------------------------------------------
+t.toggle("sv")
+t.agent_toggle("sv")
+vim.api.nvim_set_current_win(ed_win)
+vim.api.nvim_cmd({ cmd = "TermPolicy", args = { "sv" } }, {})
+local sb = t.terminals.sv.policy
+assert(vim.bo[sb].buftype == "acwrite", "policy buffers are acwrite")
+assert(vim.bo[sb].modified == false, "freshly seeded policy buffer is not modified")
+local hdr = vim.api.nvim_buf_get_lines(sb, 0, -1, false)
+assert(hdr[5] and hdr[5]:find(":w only clears", 1, true), vim.inspect(hdr))
+
+vim.api.nvim_buf_set_lines(sb, 0, -1, false, { "^echo" })
+assert(vim.bo[sb].modified == true, "edits mark modified")
+
+-- :w must NOT error (a bare write raises E5113 in this script if broken) and
+-- must NOT create anything on disk
+vim.cmd("write")
+assert(vim.bo[sb].modified == false, ":w cleared the flag")
+assert(vim.fn.filereadable("nvimterminals://policy/sv") == 0, "no junk file written")
+assert(#vim.fn.glob("nvimterminals:*", false, true) == 0, "no junk in cwd: " .. vim.fn.glob("nvimterminals:*"))
+
+-- content is still the live policy after the no-op save
+local r2 = t.send("sv", "echo hi")
+assert(r2.ok, vim.inspect(r2))
+r2 = t.send("sv", "rm x")
+assert(r2.ok == false and r2.reason == "policy_denied", vim.inspect(r2))
+t.close("sv")
+
 print("POLICY-WINDOW TESTS PASSED")

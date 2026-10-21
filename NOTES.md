@@ -85,7 +85,11 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   so); do not add new reason strings without coordinating with nvimcp
 - Reads are never gated: `lines()` works on dead terminals too (scrollback)
 - Policy buffer `nvimterminals://policy/<name>` IS the storage (buflisted=false,
-  filetype=lua); read fresh each send — deliberately NO caching/invalidation.
+  buftype=acwrite, filetype=lua); read fresh each send — deliberately NO
+  caching/invalidation. `:w` is a no-op save: the BufWriteCmd handler only
+  clears `modified` (acwrite keeps writes off disk; the old plain-buftype
+  buffers tried to CREATE a file named `nvimterminals://policy/<name>` and
+  raised E212). Seeding the header clears `modified` too.
   While it exists it REPLACES the global fallback (empty buffer => deny all).
   `:TermPolicy` on an unknown name pre-creates the buffer; it attaches to the
   terminal by name at send time; explicit buffer deletion resets to fallback
@@ -126,13 +130,14 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   Last-visible terminal follows the toggle-hide window rule. Policy buffer
   SURVIVES close; respawn re-attaches it by name; deleting it resets to the
   global fallback.
-- Policy window (W1 cleanup): `:TermPolicy` shows the policy buffer in a
+- Policy window (W1/W2 cleanup): `:TermPolicy` shows the policy buffer in a
   centered editor-relative float (`policy_window="float"` default; `"split"`
   restores the legacy `botright 20vsplit`). An already-visible policy buffer
   is just FOCUSSED regardless of mode — never converted or duplicated. Pure
   presentation: the buffer stays the storage, gating semantics unchanged
-  (pinned in `tests/policy_window.lua`). `nvim_win_get_config` returns
-  `title` as a CHUNK LIST `{{text, hl}}`, not a string.
+  (pinned in `tests/policy_window.lua`). W2 pinned too: acwrite, unmodified
+  at seed, `:w` clears the flag and writes nothing to disk.
+  `nvim_win_get_config` returns `title` as a CHUNK LIST `{{text, hl}}`, not a string.
 
 ### Testing gotchas (learned the hard way)
 

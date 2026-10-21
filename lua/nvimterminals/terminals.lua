@@ -165,6 +165,20 @@ vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
   end,
 })
 
+-- :w on a policy buffer is a SAVE GESTURE, not a file write: the buffer
+-- content IS the live policy (read fresh every send), so the acwrite buftype
+-- routes writes here and we only clear the modified flag. No file is ever
+-- written (the old empty-buftype buffers tried to create junk files named
+-- "nvimterminals://policy/<name>" and errored E212).
+vim.api.nvim_create_autocmd("BufWriteCmd", {
+  group = augroup,
+  pattern = "nvimterminals://policy/*",
+  callback = function(ev)
+    vim.bo[ev.buf].modified = false
+  end,
+  desc = "nvimterminals: policy :w is a no-op save (the buffer IS the live policy)",
+})
+
 -- Observability: report named terminals still running when nvim exits.
 -- Uses nvim_echo (err=false, no history) rather than vim.notify so headless
 -- test output can't pick up a trailing line and break `tail -1` checks.

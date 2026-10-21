@@ -122,7 +122,8 @@ agent_enabled, policy} (+ transient `closing` inside `M.close`); keys move via
 `M.rename` but the state TABLE's IDENTITY never changes (nvimcp may hold
 `M.get` results); `on_exit` resolves the name by JOB ID; state drops ONLY via
 the buffer-death autocmd; the policy buffer `nvimterminals://policy/<name>` IS
-the storage, read fresh each send, no caching.
+the storage (buftype=acwrite; `:w` = no-op save that only clears `modified`),
+read fresh each send, no caching.
 
 ## Phase queue — execute in order, report after each
 

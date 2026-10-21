@@ -82,13 +82,18 @@ function M.policy_buffer(name, create)
     vim.bo[buf].buflisted = false
     vim.bo[buf].bufhidden = "hide"
     vim.bo[buf].swapfile = false
+    -- acwrite routes :w to the BufWriteCmd no-op handler (terminals.lua):
+    -- the buffer content IS the live policy, there is nothing to save to disk.
+    vim.bo[buf].buftype = "acwrite"
     vim.bo[buf].filetype = "lua"
     pcall(vim.api.nvim_buf_set_lines, buf, 0, -1, false, {
       "# nvimterminals policy for terminal: " .. name,
       "# one Lua pattern per line; matched against the trimmed command.",
       "# 'deny <pattern>' denies before allows; a lone '*' allows everything.",
       "# empty / comment-only policy denies all commands.",
+      "# edits take effect on the next send; :w only clears the changed flag.",
     })
+    vim.bo[buf].modified = false
   end
 
   if buf and state then
