@@ -78,6 +78,18 @@ local function show_buffer(bufnr)
   anchor_win()
   local position = config.get("position")
   local size = config.get("size")
+  -- N1 adaptive narrow-pane fallback: convert a too-narrow left/right split
+  -- into a horizontal one (full width). Type-guarded: narrow_min_width must
+  -- be a number or the feature is off (0/false/nil all disable).
+  local minw = config.get("narrow_min_width")
+  minw = type(minw) == "number" and minw or 0
+  if (position == "left" or position == "right")
+    and math.floor(vim.o.columns * size) < minw then
+    local fb = config.get("narrow_position")
+    if fb == "top" or fb == "bottom" then
+      position = fb
+    end
+  end
   local cmds = {
     right = string.format("rightbelow %dvsplit", math.floor(vim.o.columns * size)),
     left = string.format("leftabove %dvsplit", math.floor(vim.o.columns * size)),

@@ -17,6 +17,12 @@ backend for agents (nvimcp) with explicit, per-terminal command whitelists.
   buffer is never replaced or renamed.
 - Splitting anchors to your editor window even when you spawn from inside a
   terminal window, so terminals don't cascade nested.
+- Adaptive narrow-pane fallback: if a NEW left/right split would leave the
+  terminal less than `narrow_min_width` columns (default 60), it opens
+  horizontally at `narrow_position` (default `bottom`) instead — small editor
+  windows get a full-width terminal. New panes only: an existing pane keeps
+  its orientation and resizing never re-flips it; `narrow_min_width = 0` (or
+  `false`) disables.
 - Terminal buffers are unlisted: they stay out of `:ls`, bufferline, and tab pickers.
 - When a terminal's process exits, the terminal is kept as a dead
   `[dead]` entry (scrollback preserved); toggling respawns it cleanly.
@@ -149,6 +155,8 @@ With lazy.nvim:
     require("nvimterminals").setup({
       position = "right", -- "left" | "top" | "bottom"
       size = 0.35,
+      narrow_min_width = 60, -- new left/right pane narrower than this...
+      narrow_position = "bottom", -- ...opens here instead (0/false disables)
       policy_window = "float", -- or "split" for the legacy :TermPolicy window
       -- keymaps = {
       --   toggle_last = "<C-\\>",  -- nvim-terminals: last terminal

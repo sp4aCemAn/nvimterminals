@@ -18,10 +18,13 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
 - `lua/nvimterminals/config.lua` — defaults + merge: `position`, `size`,
   `terminal_cmd` (lazy function -> resolved in `M.get`, no require-time
   `vim.o.shell` capture), `keymaps.*`, `policy_window` ("float"|"split"),
+  `narrow_min_width`/`narrow_position` (N1 adaptive narrow-pane fallback),
   `agent = { enabled=false, allow={} }`
 - `lua/nvimterminals/terminals.lua` — core: `toggle()`, `list()`, `select()`
   (`[open]/[hidden]/[dead]` + `[agent]` markers), `find_open_win()` (skips
-  floats, searches ALL tabpages, current tab preferred), `rename()`
+  floats, searches ALL tabpages, current tab preferred), `show_buffer` with
+  the N1 narrow-pane fallback (left/right -> `narrow_position` when the pane
+  would be < `narrow_min_width` cols), `rename()`
   (identity-preserving, atomic, ghost-evicting), `close()` (successor swap ->
   jobstop+settle -> buffer delete); re-exports the frozen agent facade
   (`send/lines/policy_buffer/agent_toggle/agent_enabled`) from agent_api via
@@ -149,6 +152,18 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
   `:w` also closes floats (save-and-done) but keeps splits — the buffer
   survives every gesture either way.
   `nvim_win_get_config` returns `title` as a CHUNK LIST `{{text, hl}}`, not a string.
+- Narrow-pane fallback (N1, owner QoL): `show_buffer` NEW-SPLIT path only —
+  pane reuse, hide, respawn, close-successor and policy floats are untouched.
+  A left/right primary whose `floor(columns*size)` pane width would fall below
+  `narrow_min_width` (default 60; only a NUMBER enables — 0/false/nil disable)
+  opens horizontally at `narrow_position`; only "top"/"bottom" convert, a
+  bogus value keeps the primary, and top/bottom primaries are never converted
+  (the check only sees left/right). `size` applies to the ACTUAL split
+  dimension via the existing cmds table. Evaluated per split, never cached:
+  resizing nvim does not re-orient an existing pane (deliberate). Pinned in
+  tests/lifecycle.lua N1 section: headless is fixed 80x24, so explicit sizes
+  are the lever (0.8 -> 64 cols stays right; 0.35 -> 28 falls back; F pins
+  that reuse switches the SAME fallback window).
 
 ### Testing gotchas (learned the hard way)
 
@@ -196,6 +211,13 @@ Rename/close (R series) landed: `:TermRename`/`:TermClose` + `M.rename`/
 - `vim.fn.maparg(name, mode, false, false)` = 4 args is fine; the 5-arg form
   (buffer as 5th) raises E118 from Lua like `bufnr` — check the CURRENT
   buffer's map or use the dict form
+- `nvim_win_get_position` returns ONE `{row, col}` TABLE to Lua (not two
+  return values) — comparing it directly errors "attempt to compare two
+  table values"; index `[1]`/`[2]` (split-geometry pins in lifecycle)
+- split-ORIENTATION geometry pins in headless: vsplit <=> term and sibling
+  share the full HEIGHT and differ in WIDTH; horizontal split <=> share the
+  full WIDTH and differ in HEIGHT (`nvim_win_get_width/height`) — robust vs
+  exact-size asserts, which fight nvim's width redistribution
 
 Run tests like:
 

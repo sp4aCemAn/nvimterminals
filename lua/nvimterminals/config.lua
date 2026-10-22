@@ -16,6 +16,13 @@ M.defaults = {
   -- window; the buffer is storage, closing the window changes nothing) or
   -- "split" (legacy: botright 20vsplit).
   policy_window = "float",
+  -- N1 adaptive narrow-pane fallback: a NEW left/right split whose terminal
+  -- pane would end up narrower than narrow_min_width columns opens
+  -- horizontally at narrow_position instead (full width). 0/false/nil
+  -- disables; a narrow_position that is not "top"/"bottom" keeps the primary
+  -- position. Evaluated per split: resizing never re-orients an existing pane.
+  narrow_min_width = 60,
+  narrow_position = "bottom",
   agent = {
     enabled = false,
     allow = {},

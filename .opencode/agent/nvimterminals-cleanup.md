@@ -56,10 +56,10 @@ we never edit `~/vsc/nvimcp/`.
 - VimLeavePre uses `nvim_echo`, NOT `vim.notify` — notify's trailing lines
   break `tail -1` test checks. Pin before changing.
 
-## Gates (run after EVERY commit; all three must print their sentinel)
+## Gates (run after EVERY commit; all six must print their sentinel)
 
 ```sh
-timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/lifecycle.lua +qa       # ALL PANE-SWITCH TESTS PASSED, list=build,main,repl
+timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/lifecycle.lua +qa       # ALL PANE-SWITCH TESTS PASSED, list=build,main,n1a,n1b,n1c,n1d,n1e,repl
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/split_override.lua +qa   # SPLIT-OVERRIDE GUARD TESTS PASSED, list=main,repl
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/agent_policy.lua +qa     # AGENT-POLICY TESTS PASSED
 timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/leavenotify.lua +qa       # LEAVE-NOTIFY TESTS PASSED, running=alpha,zeta
@@ -69,7 +69,7 @@ timeout 60 nvim --headless -u NONE +'set shell=/bin/sh noswapfile' -l tests/poli
 
 The sentinel must be the LAST stdout line of each run (leavenotify.lua itself
 pins the no-trailing-output-at-exit property that keeps `tail -1` checks safe).
-Baseline as of this writing: all four PASS at HEAD. Counts/asserts may grow,
+Baseline as of this writing: all six PASS at HEAD. Counts/asserts may grow,
 never regress.
 
 ## Headless testing rules (learned the hard way — see NOTES.md)
@@ -112,10 +112,10 @@ never regress.
 lua/nvimterminals/terminals.lua   ~510 lines: panes/windows + state/lifecycle + picker + rename/close + frozen agent FACADE
 lua/nvimterminals/agent_api.lua   agent layer impl (bind(terminals_module, job_running); owns no state)
 lua/nvimterminals/agent.lua       pure whitelist semantics: parse/check (deny-before-allow, *, fail closed)
-lua/nvimterminals/config.lua      defaults + merge (policy_window="float"; agent = {enabled=false, allow={}})
+lua/nvimterminals/config.lua      defaults + merge (policy_window="float"; narrow_min_width=60 + narrow_position="bottom" (N1); agent = {enabled=false, allow={}})
 lua/nvimterminals/init.lua        setup(), commands, keymaps
 plugin/nvimterminals.lua          double-load guard
-tests/                            lifecycle.lua, split_override.lua, agent_policy.lua, leavenotify.lua (README "Tests")
+tests/                            lifecycle.lua (incl. N1 pins), split_override.lua, agent_policy.lua, leavenotify.lua, rename_close.lua, policy_window.lua (README "Tests")
 ~/vsc/nvimcp/                     CONSUMER (read-only): lua/nvimcp/tools/term.lua pins our shapes
 ```
 
@@ -153,6 +153,17 @@ consumed). `terminals.lua` re-exposes the frozen facade unchanged
 (`M.send/lines/get/agent_toggle/agent_enabled/policy_buffer`). Same code, new
 home: zero logic changes in the diff — the extraction proves itself by all
 gates passing byte-identically and `git diff` showing pure moves plus wiring.
+
+**N1 — adaptive narrow-pane fallback (owner-approved QoL proposal, EXECUTED
+2026-10-22 in the `terminals: N1` commit — nothing left to do):** a NEW
+left/right split whose pane width `floor(columns*size)` would fall below
+`narrow_min_width` (default 60; only a number enables — 0/false disables)
+opens horizontally at `narrow_position` (default "bottom"; bogus value keeps
+the primary; top/bottom primaries never convert). show_buffer-only; evaluated
+per split, never cached (resize does not re-orient existing panes). Pins:
+tests/lifecycle.lua N1 section A-F. The lifecycle gate sentinel GREW:
+`list=build,main,n1a,n1b,n1c,n1d,n1e,repl` (updated in the gate list above).
+Do NOT revert or re-implement; extend only via a new owner-approved proposal.
 
 ## Explicitly OUT of scope (NOTES.md backlog — separate proposals only)
 
